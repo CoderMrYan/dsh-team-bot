@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.6.0 — 2026-11-09
+
+### Added
+
+- A permanent left sidebar entry **团队群组** (`sidebar.panellist` id `team-bot`) and its main panel (`main` key `team-bot`), alongside Plugins and Schedules.
+- The Settings entry remains as a secondary path.
+
+### Changed
+
+- Panel padding, human-readable policy labels (仅 @ 点名 / 总管挑人 / 自动挑人), and a chat-bubble icon.
+- Local `main` pushed to GitHub over SSH (`2928ce6..b25486a`).
+
 ## 0.5.2 — 2026-11-09
 
 ### Fixed

@@ -2,7 +2,7 @@
 
 Native multi-agent group chat for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness).
 
-> Status: **P0–P3.6** — room store, routing, tools, real-Session runtime, Web panel, memory with review queue, private chats and chief desk. Packaging/CI are ready; the client half and memory drawer mount after the next Harness restart.
+> Status: **0.6.0** — shared rooms, real-Session runtime, memory with review queue, private chats/chief desk, and a Web panel reachable from the left sidebar. Packaging, CI, and GitHub push are done; npm publish is the remaining external step.
 
 ## Why
 
@@ -17,7 +17,7 @@ DSH already has single agents, subagents, and an experimental Agent Teams runtim
 - **Memory** — shared room memory (L0 raw → L1 facts → L2 summary → L3 persona) plus per-bot private memory.
 - **Real sessions** — each bot is backed by a real DSH session, so tools, approvals, streaming, search, and model selection are inherited rather than reimplemented.
 
-## P0–P3 (this commit)
+## Layout
 
 ```text
 src/host/
@@ -29,7 +29,7 @@ src/host/
   routes.js     /dsh-team-bot/api/* for the Web panel
   memory.js     L1 atoms, L2 extractive summary, L3 persona, BM25-lite recall
   tools.js      team_* model tools
-lib/client.js   Web panel: settings.section "团队群组"
+lib/client.js   sidebar + main panel + settings.section "团队群组"
 test/           store, routing, runtime, memory, client-bundle tests
 ```
 
@@ -74,7 +74,7 @@ Bot profiles persist their `sessionId`, so the next room message continues the s
 - **Recall** — CJK bigrams + ASCII words, token overlap plus an importance prior; top 4 shared and top 4 private atoms are injected into the bot prompt with the summary. Only **accepted** atoms are recalled.
 - **Review** — auto-captured atoms that are not an explicit 记住 stay `pending`; `team_memory_review` and the panel drawer accept, reject or re-open them. Rejected atoms stay in the document as tombstones but never enter a prompt.
 - **Write paths** — model tools (`team_memory_*`), the panel drawer, and `POST` / `DELETE /rooms/:id/memory` plus `POST /rooms/:id/memory/review`.
-- **Limit** — this is deterministic extraction, not an LLM summarizer; the panel memory drawer and LLM extraction are P3.5.
+- **Limit** — this is deterministic extraction, not an LLM summarizer; LLM extraction remains future work.
 
 ### Private chats and chief desk (P3.5)
 
@@ -83,13 +83,13 @@ Bot profiles persist their `sessionId`, so the next room message continues the s
 - `team_chief_desk` resolves a room's chief and adds a note that it is the chief and can post conclusions back with `team_room_post`.
 - Routes: `GET /dms`, `GET /dms/:id/messages`, `POST /dms/:id/ask`.
 
-### Web panel (P2)
+### Web panel
 
-Open **Settings → 团队群组** after the next Harness restart. The page lists rooms, shows member chips and the timeline, sends through the same runtime as `team_room_ask`, and creates rooms with bot checkboxes.
+Click **团队群组** in the left sidebar, or open **Settings → 团队群组**. The page lists rooms, shows member chips and the timeline, sends through the same runtime as `team_room_ask`, creates rooms with bot checkboxes, and has a memory drawer with accept/reject.
 
-Routes under `/dsh-team-bot/api`: `health`, `state`, `client`, `rooms` (POST), `rooms/:id/messages`, `rooms/:id/ask`, `rooms/:id/memory`.
+Routes under `/dsh-team-bot/api`: `health`, `state`, `client`, `rooms` (POST), `rooms/:id/messages`, `rooms/:id/ask`, `rooms/:id/memory`, `rooms/:id/memory/review`, `dms`.
 
-The client half is new: a package that gains `dsh.client` after the Host already booted needs one **Harness restart** for the client module graph to include it. After that, enabling/disabling the plugin row is enough.
+A package that gains `dsh.client` after the Host already booted needs one **Harness restart** for the client module graph to include it; after that, enabling/disabling the plugin row is enough.
 
 ## Data model
 

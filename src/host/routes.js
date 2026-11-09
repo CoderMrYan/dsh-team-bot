@@ -72,8 +72,11 @@ export function registerRoutes(ctx, store, runtime) {
               : []
           sendJson(res, 200, {
             id: 'dsh-team-bot',
+            requested: url.searchParams.get('id') ?? 'dsh-team-bot',
             available: modules !== undefined,
-            path: typeof modules?.clientPath === 'function' ? (modules.clientPath('dsh-team-bot') ?? null) : null,
+            path: typeof modules?.clientPath === 'function'
+              ? (modules.clientPath(url.searchParams.get('id') ?? 'dsh-team-bot') ?? null)
+              : null,
             ids: list.map((entry) => entry?.id ?? entry?.name ?? '?').slice(0, 100),
           })
           return

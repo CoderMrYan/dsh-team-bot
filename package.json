@@ -1,6 +1,6 @@
 {
   "name": "dsh-team-bot",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "description": "Native multi-agent group chat for DeepSeek Harness: shared rooms, private desks, group and per-bot memory.",
   "license": "MIT",
@@ -11,6 +11,7 @@
   "icon": "./icon.svg",
   "exports": {
     ".": "./src/host/index.js",
+    "./client": "./lib/client.js",
     "./cordis.patch.yml": "./cordis.patch.yml",
     "./locale/*.json": "./locale/*.json",
     "./icon": "./icon.svg",
@@ -19,6 +20,13 @@
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-settings-general"
+      ]
     }
   },
   "engines": {
@@ -26,6 +34,7 @@
   },
   "files": [
     "src/**/*.js",
+    "lib/client.js",
     "cordis.patch.yml",
     "locale/*.json",
     "icon.svg",
@@ -33,7 +42,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "test": "node --test test/store.test.js test/runtime.test.js",
-    "check": "node --check src/host/index.js && node --check src/host/store.js && node --check src/host/routing.js && node --check src/host/runtime.js && node --check src/host/tools.js"
+    "test": "node --test test/store.test.js test/runtime.test.js test/client.test.js",
+    "check": "node --check src/host/index.js && node --check src/host/store.js && node --check src/host/routing.js && node --check src/host/runtime.js && node --check src/host/tools.js && node --check src/host/actions.js && node --check src/host/routes.js && node --check lib/client.js"
   }
 }

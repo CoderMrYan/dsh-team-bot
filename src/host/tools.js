@@ -5,7 +5,7 @@
  * decisions. P1 adds the real-Session runtime that turns `routed` into replies.
  */
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import { buildRoomPrompt } from './runtime.js'
+import { askRoom } from './actions.js'
 
 const ANY_OBJECT = { type: 'object', additionalProperties: true }
 
@@ -136,36 +136,12 @@ export function createTools(store, runtime) {
       output: jsonOutput(),
       timeoutMs: 600_000,
       async execute(args, exec) {
-        await store.init()
-        const room = store.getRoom(args.room_id)
-        const { message, routed } = await store.postMessage({
-          roomId: room.id,
-          sender: { type: 'human', name: 'human' },
-          text: args.text,
-          mentions: args.mentions,
-        })
-        const replies = []
-        for (const botId of routed) {
-          const bot = store.getBot(botId)
-          try {
-            const history = await store.history(room.id, 12)
-            const prompt = buildRoomPrompt(room, bot, history)
-            const text = (await runtime.ask(bot, prompt, exec.signal)).trim()
-            if (text === '' || text === '[PASS]') {
-              replies.push({ bot: bot.name, skipped: true })
-              continue
-            }
-            const posted = await store.postMessage({
-              roomId: room.id,
-              sender: { type: 'bot', id: bot.id, name: bot.name },
-              text,
-            })
-            replies.push({ bot: bot.name, message_id: posted.message.id, text })
-          } catch (error) {
-            replies.push({ bot: bot.name, error: error instanceof Error ? error.message : String(error) })
-          }
-        }
-        return { posted: message, routed, replies }
+        return await askRoom(
+          store,
+          runtime,
+          { roomId: args.room_id, text: args.text, mentions: args.mentions },
+          exec.signal,
+        )
       },
     }),
 

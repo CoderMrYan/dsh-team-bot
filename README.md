@@ -2,7 +2,7 @@
 
 Native multi-agent group chat for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness).
 
-> Status: **P0 + P1** — room store, routing, tools, and the real-Session runtime. The Web panel (P2) and L0–L3 memory (P3) are next.
+> Status: **P0 + P1 + P2** — room store, routing, tools, real-Session runtime, and a native Web panel. The client half mounts after the next Harness restart; memory (P3) is next.
 
 ## Why
 
@@ -17,17 +17,19 @@ DSH already has single agents, subagents, and an experimental Agent Teams runtim
 - **Memory** — shared room memory (L0 raw → L1 facts → L2 summary → L3 persona) plus per-bot private memory.
 - **Real sessions** — each bot is backed by a real DSH session, so tools, approvals, streaming, search, and model selection are inherited rather than reimplemented.
 
-## P0 + P1 (this commit)
+## P0 + P1 + P2 (this commit)
 
 ```text
 src/host/
-  index.js      plugin entry, data dir, runtime, tool registration
+  index.js      plugin entry, data dir, runtime, tools, routes
   store.js      rooms, bots, messages, memory shells, JSON/JSONL persistence
   routing.js    mention / admin / auto routing
   runtime.js    real-Session turns: create/resume, prompt, wait for turn/end
+  actions.js    shared "post + run routed bots" action
+  routes.js     /dsh-team-bot/api/* for the Web panel
   tools.js      team_* model tools
-test/
-  store.test.js node:test coverage for the store and routing
+lib/client.js   Web panel: settings.section "团队群组"
+test/           store, runtime, and client-bundle smoke tests
 ```
 
 Tools:
@@ -52,7 +54,13 @@ Tools:
 
 Bot profiles persist their `sessionId`, so the next room message continues the same conversation and the same DSH session.
 
-P0 deliberately does **not** run bots yet: `team_room_post` returns `routed`, and the P1 runtime consumes it.
+### Web panel (P2)
+
+Open **Settings → 团队群组** after the next Harness restart. The page lists rooms, shows member chips and the timeline, sends through the same runtime as `team_room_ask`, and creates rooms with bot checkboxes.
+
+Routes under `/dsh-team-bot/api`: `health`, `state`, `client`, `rooms` (POST), `rooms/:id/messages`, `rooms/:id/ask`, `rooms/:id/memory`.
+
+The client half is new: a package that gains `dsh.client` after the Host already booted needs one **Harness restart** for the client module graph to include it. After that, enabling/disabling the plugin row is enough.
 
 ## Data model
 
@@ -78,17 +86,17 @@ Room policy:
 ## Develop
 
 ```bash
-node --test test/*.test.js
+node --test test/store.test.js test/runtime.test.js test/client.test.js
 node --check src/host/index.js
 ```
 
-The repo is a DSH bundle. Once P1 lands, install the directory with `plugin_manager install_bundle` (or `dsh plugin add`) and it appears as one plugin row.
+The repo is a DSH bundle. Install the directory with `plugin_manager install_bundle` (or `dsh plugin add`) and it appears as one plugin row.
 
 ## Roadmap
 
 - [x] P0 room store, routing, tools, tests
 - [x] P1 real-Session runtime: one Session per bot, prompt, wait for `turn/end`, append replies, per-bot serialization
-- [ ] P2 Web panel: room list, timeline, composer, member/memory drawer, chief desk
+- [x] P2 Web panel: room list, timeline, composer, member chips, room creation (client half mounts after one Harness restart)
 - [ ] P3 memory: L0–L3, hybrid recall, review queue
 - [ ] P4 schedules, task dispatch, usage, packaging, CI, publish
 

@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.12.2 — 2026-11-09
+
+### Added
+
+- **@ member autocomplete** in the composer: typing `@` lists the current room's members, and choosing one inserts the name and sends the bot id in `mentions`.
+- Typing a full `@name` manually is also inferred as an explicit mention at send time.
+
+### Fixed
+
+- Switching rooms now clears the previous timeline immediately and blurs the keyboard first, so the first tap updates the chat panel instead of being consumed by the keyboard.
+
 ## 0.12.1 — 2026-11-09
 
 ### Fixed

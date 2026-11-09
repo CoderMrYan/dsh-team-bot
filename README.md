@@ -2,7 +2,7 @@
 
 Native multi-agent group chat for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness).
 
-> Status: **P0–P3** — room store, routing, tools, real-Session runtime, Web panel, and the memory MVP (shared L1/L2 + per-bot private). The client half and memory drawer mount after the next Harness restart.
+> Status: **P0–P3 + DM/chief desk** — room store, routing, tools, real-Session runtime, Web panel, memory MVP, private chats and a chief desk. The client half and memory drawer mount after the next Harness restart.
 
 ## Why
 
@@ -48,6 +48,10 @@ Tools:
 | `team_memory_remember` | add/supersede a shared or private fact |
 | `team_memory_forget` | remove one atom by id |
 | `team_memory_persona` | add an L3 standing preference to a bot |
+| `team_dm_ask` | run one private chat turn with a bot |
+| `team_dm_history` | read a private conversation |
+| `team_dm_list` | list private conversations |
+| `team_chief_desk` | talk to a room chief with its chief role context |
 
 ### How a turn works
 
@@ -69,6 +73,13 @@ Bot profiles persist their `sessionId`, so the next room message continues the s
 - **Write paths** — model tools (`team_memory_*`) and the panel API (`POST`/`DELETE /rooms/:id/memory`).
 - **Limit** — this is deterministic extraction, not an LLM summarizer; the panel memory drawer and LLM extraction are P3.5.
 
+### Private chats and chief desk (P3.5)
+
+- Each bot can have a 1:1 conversation, stored in `messages/dm-<botId>.jsonl`; it uses the same real Session as its room turns, so context and the per-bot serial queue are shared.
+- `team_dm_ask` runs one private turn with the bot persona, private atoms and private summary.
+- `team_chief_desk` resolves a room's chief and adds a note that it is the chief and can post conclusions back with `team_room_post`.
+- Routes: `GET /dms`, `GET /dms/:id/messages`, `POST /dms/:id/ask`.
+
 ### Web panel (P2)
 
 Open **Settings → 团队群组** after the next Harness restart. The page lists rooms, shows member chips and the timeline, sends through the same runtime as `team_room_ask`, and creates rooms with bot checkboxes.
@@ -81,10 +92,11 @@ The client half is new: a package that gains `dsh.client` after the Host already
 
 ```text
 $DSH_HOME/dsh-team-bot/
-  state.json                 # version, seq, bots, rooms
-  messages/<roomId>.jsonl    # append-only timeline
-  memory/room/<roomId>.json  # shared memory (P3)
-  memory/bot/<botId>.json    # per-bot memory (P3)
+  state.json                 # version, seq, bots, rooms, directs
+  messages/<roomId>.jsonl    # append-only room timeline
+  messages/dm-<botId>.jsonl  # append-only private timeline
+  memory/room/<roomId>.json  # shared memory
+  memory/bot/<botId>.json    # per-bot memory
 ```
 
 Room policy:
@@ -113,7 +125,8 @@ The repo is a DSH bundle. Install the directory with `plugin_manager install_bun
 - [x] P1 real-Session runtime: one Session per bot, prompt, wait for `turn/end`, append replies, per-bot serialization
 - [x] P2 Web panel: room list, timeline, composer, member chips, room creation (client half mounts after one Harness restart)
 - [x] P3 memory MVP: L1 atoms, L2 extractive summary, L3 persona, BM25-lite recall, explicit capture, tools and API
-- [ ] P3.5 memory polish: LLM extraction, review queue UI, memory drawer in the panel
+- [x] P3.5 private chats and chief desk: per-bot DM timeline, DM runtime, chief role note, `/dms` API
+- [ ] P3.6 memory polish: LLM extraction, review queue UI, memory drawer in the panel
 - [ ] P4 schedules, task dispatch, usage, packaging, CI, publish
 
 ## Design references

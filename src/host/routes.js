@@ -5,7 +5,7 @@
  * same store and runtime the model tools use, so the panel and the agent never
  * diverge.
  */
-import { askRoom } from './actions.js'
+import { askDirect, askRoom } from './actions.js'
 import { createAtom } from './memory.js'
 
 const PREFIX = '/dsh-team-bot/api'
@@ -91,6 +91,30 @@ export function registerRoutes(ctx, store, runtime) {
           })
           sendJson(res, 200, room)
           return
+        }
+        if (parts[0] === 'dms') {
+          if (parts.length === 1 && req.method === 'GET') {
+            await store.init()
+            sendJson(res, 200, { directs: store.listDirects() })
+            return
+          }
+          const botId = parts[1]
+          if (botId !== undefined && parts[2] === 'messages' && req.method === 'GET') {
+            const limit = Number(url.searchParams.get('limit') ?? 50)
+            sendJson(res, 200, { messages: await store.directHistory(botId, limit) })
+            return
+          }
+          if (botId !== undefined && parts[2] === 'ask' && req.method === 'POST') {
+            const body = await readJson(req)
+            const text = typeof body.text === 'string' ? body.text : ''
+            if (text.trim() === '') {
+              sendJson(res, 400, { error: 'text is required' })
+              return
+            }
+            const result = await askDirect(store, runtime, { botId, text }, AbortSignal.timeout(300_000))
+            sendJson(res, 200, result)
+            return
+          }
         }
         if (parts[0] !== 'rooms' || parts[1] === undefined) {
           sendJson(res, 404, { error: 'not found' })

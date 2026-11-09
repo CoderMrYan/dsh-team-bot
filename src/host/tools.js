@@ -5,7 +5,7 @@
  * decisions. P1 adds the real-Session runtime that turns `routed` into replies.
  */
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import { askRoom } from './actions.js'
+import { askDirect, askRoom } from './actions.js'
 import { createAtom, createPersonaItem } from './memory.js'
 
 const ANY_OBJECT = { type: 'object', additionalProperties: true }
@@ -237,6 +237,65 @@ export function createTools(store, runtime) {
         const room = store.getRoom(args.room_id)
         if (!room.members.includes(args.bot_id)) throw new Error(`bot is not a member of this room: ${args.bot_id}`)
         return { memory: await store.addPersona(args.bot_id, createPersonaItem(args.text)) }
+      },
+    }),
+
+    defineTool({
+      name: 'team_dm_ask',
+      description: 'Send a private message to one bot and run it as a real Session turn. Returns the reply.',
+      parameters: {
+        bot_id: { type: 'string', required: true, description: 'Bot id.' },
+        text: { type: 'string', required: true, description: 'Private message text.' },
+      },
+      output: jsonOutput(),
+      timeoutMs: 600_000,
+      async execute(args, exec) {
+        return await askDirect(store, runtime, { botId: args.bot_id, text: args.text }, exec.signal)
+      },
+    }),
+
+    defineTool({
+      name: 'team_dm_history',
+      description: 'Read the latest private messages with one bot, oldest first.',
+      parameters: {
+        bot_id: { type: 'string', required: true, description: 'Bot id.' },
+        limit: { type: 'integer', description: 'Number of latest messages (1-500, default 50).' },
+      },
+      output: jsonOutput(),
+      async execute(args) {
+        return { messages: await store.directHistory(args.bot_id, args.limit) }
+      },
+    }),
+
+    defineTool({
+      name: 'team_dm_list',
+      description: 'List private conversations with their bot profile and last activity.',
+      parameters: {},
+      output: jsonOutput(),
+      async execute() {
+        await store.init()
+        return { directs: store.listDirects() }
+      },
+    }),
+
+    defineTool({
+      name: 'team_chief_desk',
+      description: 'Talk privately to a room chief; the chief can post conclusions back with team_room_post.',
+      parameters: {
+        room_id: { type: 'string', required: true, description: 'Room id whose chief to talk to.' },
+        text: { type: 'string', required: true, description: 'Private message text.' },
+      },
+      output: jsonOutput(),
+      timeoutMs: 600_000,
+      async execute(args, exec) {
+        await store.init()
+        const room = store.getRoom(args.room_id)
+        if (room.chiefId === '') throw new Error('room has no chief')
+        return await askDirect(store, runtime, {
+          botId: room.chiefId,
+          text: args.text,
+          note: `你是房间「${room.name}」的总管（chief）。群里的任务由你拆解和汇总；要把结论发回群里时，用 team_room_post({ room_id: "${room.id}", text: "...", as: "bot", bot_id: "${room.chiefId}" })。`,
+        }, exec.signal)
       },
     }),
   ]

@@ -39,7 +39,7 @@ export function normalizePolicy(input = {}) {
 
 /** @returns {object} an empty durable state. */
 function emptyState() {
-  return { version: STATE_VERSION, seq: 0, bots: {}, rooms: {} }
+  return { version: STATE_VERSION, seq: 0, bots: {}, rooms: {}, directs: {} }
 }
 
 export class TeamStore {
@@ -62,6 +62,7 @@ export class TeamStore {
         seq: Number.isSafeInteger(raw.seq) ? raw.seq : 0,
         bots: raw.bots ?? {},
         rooms: raw.rooms ?? {},
+        directs: raw.directs ?? {},
       }
     } catch (error) {
       if (error?.code !== 'ENOENT') throw error
@@ -226,6 +227,73 @@ export class TeamStore {
       .filter((line) => line.trim() !== '')
       .slice(-safeLimit)
       .map((line) => JSON.parse(line))
+  }
+
+  /** @returns {string} absolute JSONL path for one direct conversation. */
+  directPath(botId) {
+    return path.join(this.root, 'messages', `dm-${botId}.jsonl`)
+  }
+
+  /** Append one direct message and return it. */
+  async postDirect(input) {
+    await this.init()
+    const bot = this.getBot(input.botId)
+    const text = String(input.text ?? '').trim()
+    if (text === '') throw new Error('direct message text is required')
+    const sender = {
+      type: input.sender?.type === 'bot' ? 'bot' : 'human',
+      id: String(input.sender?.id ?? ''),
+      name: String(input.sender?.name ?? (input.sender?.type === 'bot' ? bot.name : 'human')),
+    }
+    const message = {
+      id: newId('dm'),
+      kind: 'direct',
+      botId: bot.id,
+      seq: this.state.seq + 1,
+      sender,
+      text,
+      ts: new Date().toISOString(),
+    }
+    this.state.seq = message.seq
+    const current = this.state.directs[bot.id] ?? { botId: bot.id, count: 0, lastAt: message.ts }
+    this.state.directs[bot.id] = { botId: bot.id, count: current.count + 1, lastAt: message.ts }
+    await mkdir(path.dirname(this.directPath(bot.id)), { recursive: true })
+    await appendFile(this.directPath(bot.id), `${JSON.stringify(message)}\n`, 'utf8')
+    await this.save()
+    return message
+  }
+
+  /** Read the latest direct messages, oldest first. */
+  async directHistory(botId, limit = 50) {
+    await this.init()
+    this.getBot(botId)
+    const safeLimit = clampInt(limit, 1, 500, 50)
+    let raw = ''
+    try {
+      raw = await readFile(this.directPath(botId), 'utf8')
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error
+    }
+    return raw
+      .split('\n')
+      .filter((line) => line.trim() !== '')
+      .slice(-safeLimit)
+      .map((line) => JSON.parse(line))
+  }
+
+  /** List direct conversations with their bot profile. */
+  listDirects() {
+    return Object.values(this.state.directs).map((direct) => ({
+      ...direct,
+      bot: this.state.bots[direct.botId],
+    }))
+  }
+
+  /** Replace one bot's private summary. */
+  async setBotSummary(botId, summary) {
+    const memory = await this.botMemory(botId)
+    memory.summary = String(summary ?? '').slice(0, 1200)
+    return await this.saveMemory('bot', botId, memory)
   }
 
   /** Read shared room memory. */

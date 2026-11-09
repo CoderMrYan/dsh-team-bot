@@ -57,8 +57,34 @@ Reply to the latest message as ${bot.name}. Rules:
 - If you have nothing useful to add, reply exactly [PASS].`
 }
 
-export class BotRuntime {
-  /**
+/** @returns {string} the model-facing prompt for one private chat turn. */
+export function buildDirectPrompt(bot, messages, memory, note) {
+  const recent = messages
+    .slice(-12)
+    .map((message) => {
+      const who = message.sender.type === 'bot' ? message.sender.name : 'human'
+      return `[${who}] ${String(message.text).slice(0, 500)}`
+    })
+    .join('\n')
+  const query = memory?.query ?? messages.at(-1)?.text ?? ''
+  const block = memory === undefined ? '' : formatMemory(undefined, memory.botMemory, query)
+  const section = block === '' ? '' : `\n\n${block}`
+  const noteBlock = typeof note === 'string' && note.trim() !== '' ? `\n\n${note.trim()}` : ''
+  return `You are "${bot.name}", ${bot.role}, in a private DSH chat with the Lead (human).
+
+${bot.persona}${noteBlock}${section}
+
+Recent private messages (oldest first):
+${recent}
+
+Reply as ${bot.name}. Rules:
+- Reply in Chinese unless the Lead writes in another language.
+- Keep it under 200 Chinese characters.
+- If the Lead asks you to post into a room, use team_room_post with the room id and your bot id.
+- If you have nothing useful to add, reply exactly [PASS].`
+}
+
+export class BotRuntime {  /**
    * @param {import('@deepseek-ai/cordis').Context} ctx
    * @param {import('./store.js').TeamStore} store
    * @param {{ timeoutMs?: number, pollMs?: number }} options

@@ -1,7 +1,7 @@
 /**
  * Room actions shared by the model tool and the Web API.
  */
-import { buildRoomPrompt } from './runtime.js'
+import { buildDirectPrompt, buildRoomPrompt } from './runtime.js'
 import { buildSummary, captureFromHuman } from './memory.js'
 
 /**
@@ -50,4 +50,32 @@ export async function askRoom(store, runtime, input, signal) {
   }
   await store.setRoomSummary(room.id, buildSummary(await store.history(room.id, 8)))
   return { posted: message, routed, replies }
+}
+
+/**
+ * Append a human direct message, run one bot as a real Session turn, and append
+ * its reply. Private memory and a private summary are the only context.
+ */
+export async function askDirect(store, runtime, input, signal) {
+  await store.init()
+  const bot = store.getBot(input.botId)
+  const posted = await store.postDirect({
+    botId: bot.id,
+    sender: { type: 'human', name: 'human' },
+    text: input.text,
+  })
+  const captured = captureFromHuman(input.text, posted.id)
+  if (captured !== undefined) await store.rememberBot(bot.id, captured)
+  const history = await store.directHistory(bot.id, 12)
+  const botMemory = await store.botMemory(bot.id)
+  const query = [input.text, ...history.slice(-3).map((item) => item.text)].join('\n')
+  const text = (await runtime.ask(bot, buildDirectPrompt(bot, history, { botMemory, query }, input.note), signal)).trim()
+  if (text === '' || text === '[PASS]') return { posted, reply: undefined }
+  const reply = await store.postDirect({
+    botId: bot.id,
+    sender: { type: 'bot', id: bot.id, name: bot.name },
+    text,
+  })
+  await store.setBotSummary(bot.id, buildSummary(await store.directHistory(bot.id, 8)))
+  return { posted, reply }
 }

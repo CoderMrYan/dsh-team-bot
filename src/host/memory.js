@@ -162,6 +162,9 @@ export function formatMemory(roomMemory, botMemory, query) {
     parts.push(`Shared facts:\n${roomAtoms.map((atom) => `- ${atom.text}`).join('\n')}`)
   }
   const botAtoms = recallAtoms(query, botMemory?.atoms, 4)
+  if (typeof botMemory?.summary === 'string' && botMemory.summary.trim() !== '') {
+    parts.push(`Your private summary:\n${botMemory.summary.trim()}`)
+  }
   if (botAtoms.length > 0) {
     parts.push(`Your private memory:\n${botAtoms.map((atom) => `- ${atom.text}`).join('\n')}`)
   }

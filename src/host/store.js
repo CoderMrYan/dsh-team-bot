@@ -208,7 +208,7 @@ export class TeamStore {
     await mkdir(path.dirname(this.messagesPath(room.id)), { recursive: true })
     await appendFile(this.messagesPath(room.id), `${JSON.stringify(message)}\n`, 'utf8')
     await this.save()
-    return { message, routed: routeMessage(room, message) }
+    return { message, routed: routeMessage(room, message, this.state.bots) }
   }
 
   /** Read the latest `limit` messages, oldest first. */

@@ -57,9 +57,10 @@ Tools:
 ### How a turn works
 
 1. `team_room_ask` posts the human message and gets `routed`.
-2. For each routed bot: `sessionController.create` (first time) or `resolveAgent` (later), then `prompt` with the bot persona, the room name, and the last 12 messages.
-3. The runtime polls the Session log for `turn/end`, extracts the last `assistant/message` text, and appends it to the room as that bot.
-4. `[PASS]` and empty replies are skipped. Per-bot calls serialize; the tool waits for the whole routed batch.
+2. Routing: explicit `@` wins; `admin` goes to the chief; `auto` scores each bot's name, role and persona tokens against the message, then falls back to the first `maxSpeakers` members when nothing matches.
+3. For each routed bot: `sessionController.create` (first time) or `resolveAgent` (later), then `prompt` with the bot persona, the room name, and the last 12 messages.
+4. The runtime polls the Session log for `turn/end`, extracts the last `assistant/message` text, and appends it to the room as that bot.
+5. `[PASS]` and empty replies are skipped. Per-bot calls serialize; the tool waits for the whole routed batch.
 
 Bot profiles persist their `sessionId`, so the next room message continues the same conversation and the same DSH session.
 
@@ -123,6 +124,13 @@ dsh plugin --profile web add D:\applications\dsh\dsh-team-bot
 ```
 
 The directory can also be installed through the Plugins page (`plugin_manager install_bundle`). The Host half (tools, routes, memory) is live immediately; the Web client half mounts after one Harness restart when the package first gains `dsh.client`.
+
+Verified packaging:
+
+- `npm pack` → 17 files, ~22 kB (LICENSE / README / CHANGELOG / client / host / locale)
+- `npm install <tarball>` → `added 1 package`
+- `npm publish --dry-run` → passes with public access
+- `npm view dsh-team-bot` → 404, so the name is free
 
 ```yaml
 - id: team-bot

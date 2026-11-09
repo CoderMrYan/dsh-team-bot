@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.1 — 2026-11-09
+
+### Changed
+
+- `auto` routing now scores each member's name, role and persona against the message tokens before falling back to the first `maxSpeakers` members.
+- Verified packaging: `npm pack` (17 files), `npm install <tarball>` (`added 1 package`), and `npm publish --dry-run` (public).
+
 ## 0.5.0 — 2026-11-09
 
 ### Added

@@ -116,6 +116,17 @@ test('routing drops mentions outside the room and caps speakers', () => {
   assert.deepEqual(routeMessage(room, { mentions: [] }), [])
 })
 
+test('auto routing scores bot profiles before falling back', () => {
+  const bots = {
+    a: { name: 'alice', role: '情报研究员', persona: '收集事实与来源' },
+    b: { name: 'bob', role: '内容写手', persona: '写稿' },
+    c: { name: 'carol', role: '审校', persona: '审校稿件' },
+  }
+  const room = { members: ['a', 'b', 'c'], chiefId: 'a', policy: normalizePolicy({ replyMode: 'auto', maxSpeakers: 1 }) }
+  assert.deepEqual(routeMessage(room, { text: '请审校这份稿件', mentions: [] }, bots), ['c'])
+  assert.deepEqual(routeMessage(room, { text: '随便聊聊', mentions: [] }, bots), ['a'])
+})
+
 test('history and state persist across a reload', async () => {
   const { dir, store, room, bots } = await freshRoom({ replyMode: 'auto' })
   try {

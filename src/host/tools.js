@@ -63,7 +63,7 @@ export function createTools(store, runtime) {
         name: { type: 'string', required: true, description: 'Unique room name.' },
         members: { type: 'array', items: { type: 'string' }, description: 'Bot ids to include; the first defaults to chief.' },
         chief_id: { type: 'string', description: 'Bot id of the chief; must be a member. Defaults to the first member.' },
-        reply_mode: { type: 'string', enum: ['mention', 'admin', 'auto'], description: 'mention: only explicit @; admin: chief answers; auto: first max_speakers members.' },
+        reply_mode: { type: 'string', enum: ['mention', 'admin', 'auto'], description: 'mention: only explicit @; admin: chief answers; auto: score bot profiles against the message, then fall back to the first max_speakers members.' },
         max_speakers: { type: 'integer', description: 'Maximum bots routed per message (1-8, default 3).' },
         hop_limit: { type: 'integer', description: 'Maximum relay hops (0-5, default 2).' },
       },

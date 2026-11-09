@@ -26,13 +26,14 @@ export async function askRoom(store, runtime, input, signal) {
   const captured = captureFromHuman(message.text, message.id)
   if (captured !== undefined) await store.rememberRoom(room.id, captured)
   const roomMemory = await store.roomMemory(room.id)
+  const teamMemory = room.teamId === '' ? undefined : await store.teamMemory(room.teamId)
   for (const botId of routed) {
     const bot = store.getBot(botId)
     try {
       const history = await store.history(room.id, 12)
       const botMemory = await store.botMemory(bot.id)
       const query = [message.text, ...history.slice(-3).map((item) => item.text)].join('\n')
-      const prompt = buildRoomPrompt(room, bot, history, { roomMemory, botMemory, query })
+      const prompt = buildRoomPrompt(room, bot, history, { roomMemory, botMemory, teamMemory, query })
       const text = (await runtime.ask(bot, prompt, signal)).trim()
       if (text === '' || text === '[PASS]') {
         replies.push({ bot: bot.name, skipped: true })

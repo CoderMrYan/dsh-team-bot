@@ -152,8 +152,15 @@ export function buildSummary(messages, maxChars = 700) {
  * Render the memory block injected into a bot prompt.
  * @returns {string} empty when there is nothing to inject.
  */
-export function formatMemory(roomMemory, botMemory, query) {
+export function formatMemory(roomMemory, botMemory, query, teamMemory) {
   const parts = []
+  if (typeof teamMemory?.summary === 'string' && teamMemory.summary.trim() !== '') {
+    parts.push(`Shared team summary:\n${teamMemory.summary.trim()}`)
+  }
+  const teamAtoms = recallAtoms(query, teamMemory?.atoms, 4)
+  if (teamAtoms.length > 0) {
+    parts.push(`Shared team facts:\n${teamAtoms.map((atom) => `- ${atom.text}`).join('\n')}`)
+  }
   if (typeof roomMemory?.summary === 'string' && roomMemory.summary.trim() !== '') {
     parts.push(`Shared room summary:\n${roomMemory.summary.trim()}`)
   }

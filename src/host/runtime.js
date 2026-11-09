@@ -41,7 +41,7 @@ export function buildRoomPrompt(room, bot, messages, memory) {
     })
     .join('\n')
   const query = memory?.query ?? messages.at(-1)?.text ?? ''
-  const memoryBlock = memory === undefined ? '' : formatMemory(memory.roomMemory, memory.botMemory, query)
+  const memoryBlock = memory === undefined ? '' : formatMemory(memory.roomMemory, memory.botMemory, query, memory.teamMemory)
   const memorySection = memoryBlock === '' ? '' : `\n\n${memoryBlock}`
   return `You are "${bot.name}", ${bot.role}, in the DSH group room "${room.name}".
 

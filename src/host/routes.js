@@ -102,6 +102,45 @@ export function registerRoutes(ctx, store, runtime) {
           })
           return
         }
+        if (parts[0] === 'teams' && parts[1] !== undefined && parts[2] === 'memory') {
+          const teamId = parts[1]
+          if (req.method === 'GET') {
+            sendJson(res, 200, { team: await store.teamMemory(teamId) })
+            return
+          }
+          if (req.method === 'POST' && parts[3] === 'review') {
+            const body = await readJson(req)
+            const atomId = typeof body.atom_id === 'string' ? body.atom_id : ''
+            const action = body.action
+            if (atomId === '' || (action !== 'accept' && action !== 'reject' && action !== 'pending')) {
+              sendJson(res, 400, { error: 'atom_id and a valid action are required' })
+              return
+            }
+            const review = action === 'accept' ? 'accepted' : action === 'reject' ? 'rejected' : 'pending'
+            sendJson(res, 200, { memory: await store.reviewTeam(teamId, atomId, review) })
+            return
+          }
+          if (req.method === 'POST') {
+            const body = await readJson(req)
+            const atom = createAtom({
+              text: typeof body.text === 'string' ? body.text : '',
+              key: typeof body.key === 'string' ? body.key : undefined,
+              importance: typeof body.importance === 'number' ? body.importance : undefined,
+              source: 'api',
+            })
+            sendJson(res, 200, await store.rememberTeam(teamId, atom))
+            return
+          }
+          if (req.method === 'DELETE') {
+            const atomId = url.searchParams.get('atom') ?? ''
+            if (atomId === '') {
+              sendJson(res, 400, { error: 'atom is required' })
+              return
+            }
+            sendJson(res, 200, { memory: await store.forgetTeam(teamId, atomId) })
+            return
+          }
+        }
         if (parts[0] === 'teams' && parts[1] !== undefined && parts.length === 2 && req.method === 'DELETE') {
           sendJson(res, 200, await store.deleteTeam(parts[1]))
           return

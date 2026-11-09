@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.10.0 — 2026-11-09
+
+### Added
+
+- **Team-wide memory**: atoms and summaries scoped to a `teamId`, shared by every room in that team and injected after team memory into each bot prompt.
+- `team_memory_*` tools accept `scope: "team"` with `team_id`; `team_room_memory` also returns the team document.
+- `GET/POST/DELETE /teams/:teamId/memory` and `POST /teams/:teamId/memory/review`.
+- The panel memory drawer has **房间记忆 / 团队记忆** tabs.
+
 ## 0.9.1 — 2026-11-09
 
 ### Changed

@@ -251,8 +251,14 @@ export function createTools(store, runtime) {
       output: jsonOutput(),
       async execute(args) {
         const room = await store.roomMemory(args.room_id)
+        const scope = store.getRoom(args.room_id)
+        const team = scope.teamId === '' ? undefined : await store.teamMemory(scope.teamId)
         const bot = typeof args.bot_id === 'string' && args.bot_id !== '' ? await store.botMemory(args.bot_id) : undefined
-        return bot === undefined ? { room } : { room, bot }
+        return {
+          room,
+          ...(team === undefined ? {} : { team }),
+          ...(bot === undefined ? {} : { bot }),
+        }
       },
     }),
 
@@ -264,7 +270,8 @@ export function createTools(store, runtime) {
         room_id: { type: 'string', required: true, description: 'Room id.' },
         text: { type: 'string', required: true, description: 'The fact to remember.' },
         key: { type: 'string', description: 'Stable key; reusing it supersedes the old atom.' },
-        scope: { type: 'string', enum: ['room', 'bot'], description: 'room (shared) or bot (private); defaults to room.' },
+        scope: { type: 'string', enum: ['room', 'team', 'bot'], description: 'room (shared), team (shared across the team), or bot (private); defaults to room.' },
+        team_id: { type: 'string', description: 'Required when scope=team.' },
         bot_id: { type: 'string', description: 'Required when scope=bot.' },
         importance: { type: 'number', description: '0-1 importance, default 0.5.' },
       },
@@ -277,6 +284,10 @@ export function createTools(store, runtime) {
           importance: args.importance,
           source: 'tool',
         })
+        if (args.scope === 'team') {
+          if (typeof args.team_id !== 'string' || args.team_id === '') throw new Error('team_id is required when scope=team')
+          return await store.rememberTeam(args.team_id, atom)
+        }
         if (args.scope === 'bot') {
           if (typeof args.bot_id !== 'string' || args.bot_id === '') throw new Error('bot_id is required when scope=bot')
           return await store.rememberBot(args.bot_id, atom)
@@ -291,12 +302,17 @@ export function createTools(store, runtime) {
       parameters: {
         room_id: { type: 'string', required: true, description: 'Room id.' },
         atom_id: { type: 'string', required: true, description: 'Memory atom id from team_room_memory.' },
-        scope: { type: 'string', enum: ['room', 'bot'], description: 'room (shared) or bot (private); defaults to room.' },
+        scope: { type: 'string', enum: ['room', 'team', 'bot'], description: 'room (shared), team (shared across the team), or bot (private); defaults to room.' },
+        team_id: { type: 'string', description: 'Required when scope=team.' },
         bot_id: { type: 'string', description: 'Required when scope=bot.' },
       },
       output: jsonOutput(),
       async execute(args) {
         await store.init()
+        if (args.scope === 'team') {
+          if (typeof args.team_id !== 'string' || args.team_id === '') throw new Error('team_id is required when scope=team')
+          return { memory: await store.forgetTeam(args.team_id, args.atom_id) }
+        }
         if (args.scope === 'bot') {
           if (typeof args.bot_id !== 'string' || args.bot_id === '') throw new Error('bot_id is required when scope=bot')
           return { memory: await store.forgetBot(args.bot_id, args.atom_id) }
@@ -329,13 +345,18 @@ export function createTools(store, runtime) {
         room_id: { type: 'string', required: true, description: 'Room id.' },
         atom_id: { type: 'string', required: true, description: 'Memory atom id.' },
         action: { type: 'string', required: true, enum: ['accept', 'reject', 'pending'], description: 'Review decision.' },
-        scope: { type: 'string', enum: ['room', 'bot'], description: 'room (shared) or bot (private); defaults to room.' },
+        scope: { type: 'string', enum: ['room', 'team', 'bot'], description: 'room (shared), team (shared across the team), or bot (private); defaults to room.' },
+        team_id: { type: 'string', description: 'Required when scope=team.' },
         bot_id: { type: 'string', description: 'Required when scope=bot.' },
       },
       output: jsonOutput(),
       async execute(args) {
         await store.init()
         const review = args.action === 'accept' ? 'accepted' : args.action === 'reject' ? 'rejected' : 'pending'
+        if (args.scope === 'team') {
+          if (typeof args.team_id !== 'string' || args.team_id === '') throw new Error('team_id is required when scope=team')
+          return { memory: await store.reviewTeam(args.team_id, args.atom_id, review) }
+        }
         if (args.scope === 'bot') {
           if (typeof args.bot_id !== 'string' || args.bot_id === '') throw new Error('bot_id is required when scope=bot')
           return { memory: await store.reviewBot(args.bot_id, args.atom_id, review) }

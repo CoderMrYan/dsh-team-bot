@@ -4,7 +4,7 @@ Native multi-agent group chat for [DeepSeek Harness](https://github.com/deepseek
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-> Status: **0.9.1** — shared rooms, real-Session runtime, memory with review queue, private chats/chief desk, a left-sidebar Web panel, and one-sentence team composition with avatars. Install from GitHub; npm publish is optional and not done.
+> Status: **0.10.0** — shared rooms, real-Session runtime, memory with review queue, private chats/chief desk, a left-sidebar Web panel, one-sentence team composition with avatars, and team-wide memory. Install from GitHub; npm publish is optional and not done.
 
 ## Why
 
@@ -68,8 +68,8 @@ Tools:
 | `team_room_post` | append a message and return the routed bots (store only) |
 | `team_room_ask` | append a human message, run the routed bots as real turns, append their replies |
 | `team_room_history` | read the latest messages |
-| `team_room_memory` | read shared and per-bot memory |
-| `team_memory_remember` | add/supersede a shared or private fact |
+| `team_room_memory` | read shared room, team, and per-bot memory |
+| `team_memory_remember` | add/supersede a room, team, or private fact |
 | `team_memory_forget` | remove one atom by id |
 | `team_memory_persona` | add an L3 standing preference to a bot |
 | `team_memory_review` | accept / reject / re-open one atom |
@@ -91,6 +91,7 @@ Bot profiles persist their `sessionId`, so the next room message continues the s
 ### Memory (P3 MVP)
 
 - **L0** — the append-only room JSONL stays the source of truth.
+- **Team** — rooms with the same `teamId` share `memory/team/<teamId>.json`; team facts are injected before room facts, so 前期组 and 后期组 see the same team standard.
 - **L1** — atoms `{key, text, importance, review}`. Same `key` supersedes, a near-duplicate (Jaccard ≥ 0.8) is skipped, and the list is capped at 40 by importance.
 - **L2** — an extractive summary over the last 8 messages, refreshed after every `ask`.
 - **L3** — per-bot standing preferences (`team_memory_persona`), capped at 12.
@@ -111,7 +112,7 @@ Bot profiles persist their `sessionId`, so the next room message continues the s
 
 Click **团队群组** in the left sidebar, or open **Settings → 团队群组**. Rooms are grouped under their team and can be collapsed or filtered with the search box; the page shows member chips, the timeline with bot avatars, a composer, room creation with Bot search, and a memory drawer with accept/reject. **管理** edits a room's members and chief, and can delete the room or the whole team (with confirmation).
 
-Routes under `/dsh-team-bot/api`: `health`, `state`, `client`, `templates`, `compose`, `rooms` (POST), `rooms/:id` (PATCH/DELETE), `rooms/:id/messages`, `rooms/:id/ask`, `rooms/:id/memory`, `rooms/:id/memory/review`, `teams/:teamId` (DELETE), `dms`.
+Routes under `/dsh-team-bot/api`: `health`, `state`, `client`, `templates`, `compose`, `rooms` (POST), `rooms/:id` (PATCH/DELETE), `rooms/:id/messages`, `rooms/:id/ask`, `rooms/:id/memory`, `rooms/:id/memory/review`, `teams/:teamId` (DELETE), `teams/:teamId/memory`, `teams/:teamId/memory/review`, `dms`.
 
 A package that gains `dsh.client` after the Host already booted needs one **Harness restart** for the client module graph to include it; after that, enabling/disabling the plugin row is enough.
 
@@ -123,6 +124,7 @@ $DSH_HOME/dsh-team-bot/
   messages/<roomId>.jsonl    # append-only room timeline
   messages/dm-<botId>.jsonl  # append-only private timeline
   memory/room/<roomId>.json  # shared memory
+  memory/team/<teamId>.json  # team-wide memory
   memory/bot/<botId>.json    # per-bot memory
 ```
 
@@ -189,6 +191,7 @@ The repo is a DSH bundle. Install the directory with `plugin_manager install_bun
 - [x] P6 one-sentence teams: archetypes, sub-rooms, chief grafting, deterministic avatars, panel AI 建队
 - [x] P7 UX: team-grouped room list, manage members/chief, timeline avatars, auto-scroll, more avatar variants
 - [x] P8 lifecycle: delete room/team, confirmation, timeline and memory cleanup
+- [x] P9 team-wide memory: shared atoms across every room in a team, panel tabs, tools and API
 - [ ] npm publish (optional, deferred)
 
 ## Design references

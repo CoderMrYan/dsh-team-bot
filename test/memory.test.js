@@ -95,6 +95,28 @@ test('store review changes an atom state and validates it', async () => {
   }
 })
 
+test('team memory is shared across rooms and injected', async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'dsh-team-bot-team-memory-'))
+  try {
+    const store = new TeamStore(dir)
+    await store.init()
+    const alice = await store.createBot({ name: 'alice', teamId: 'team-t1' })
+    const bob = await store.createBot({ name: 'bob', teamId: 'team-t1' })
+    await store.createRoom({ name: 'one', members: [alice.id], teamId: 'team-t1' })
+    await store.createRoom({ name: 'two', members: [bob.id], teamId: 'team-t1' })
+    await store.rememberTeam('team-t1', createAtom({ text: '团队统一用中文交付', key: 'lang' }))
+    const team = await store.teamMemory('team-t1')
+    assert.equal(team.atoms[0].text, '团队统一用中文交付')
+    const text = formatMemory(undefined, undefined, '中文', team)
+    assert.match(text, /Shared team facts/)
+    await store.reviewTeam('team-t1', team.atoms[0].id, 'rejected')
+    assert.equal((await store.teamMemory('team-t1')).atoms[0].review, 'rejected')
+    await assert.rejects(() => store.teamMemory('team-missing'), /unknown team/)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
 test('store persists shared and private memory across a reload', async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), 'dsh-team-bot-memory-'))
   try {

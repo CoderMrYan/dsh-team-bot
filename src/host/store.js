@@ -366,6 +366,50 @@ export class TeamStore {
     return await this.saveMemory('bot', botId, memory)
   }
 
+  /** Read shared team memory. */
+  async teamMemory(teamId) {
+    await this.init()
+    this.assertTeam(teamId)
+    return normalizeMemory(await this.readJson(this.memoryPath('team', teamId), defaultMemory()))
+  }
+
+  /** @param {string} teamId */
+  assertTeam(teamId) {
+    const id = String(teamId ?? '')
+    if (id === '') throw new Error('team id is required')
+    const exists = Object.values(this.state.rooms).some((room) => room.teamId === id)
+      || Object.values(this.state.bots).some((bot) => bot.teamId === id)
+    if (!exists) throw new Error(`unknown team: ${id}`)
+  }
+
+  /** Add or supersede one team-wide atom. */
+  async rememberTeam(teamId, atom) {
+    const memory = await this.teamMemory(teamId)
+    const merged = mergeAtoms(memory.atoms, atom)
+    memory.atoms = merged.atoms
+    await this.saveMemory('team', teamId, memory)
+    return { memory, ...merged }
+  }
+
+  /** Remove one team-wide atom. */
+  async forgetTeam(teamId, atomId) {
+    const memory = await this.teamMemory(teamId)
+    memory.atoms = memory.atoms.filter((atom) => atom.id !== atomId)
+    return await this.saveMemory('team', teamId, memory)
+  }
+
+  /** Accept, reject or re-open one team-wide atom. */
+  async reviewTeam(teamId, atomId, review) {
+    return await this.reviewMemory('team', teamId, atomId, review)
+  }
+
+  /** Replace the team-wide summary. */
+  async setTeamSummary(teamId, summary) {
+    const memory = await this.teamMemory(teamId)
+    memory.summary = String(summary ?? '').slice(0, 1200)
+    return await this.saveMemory('team', teamId, memory)
+  }
+
   /** Read shared room memory. */
   async roomMemory(roomId) {
     await this.init()
@@ -439,7 +483,11 @@ export class TeamStore {
     if (review !== 'accepted' && review !== 'rejected' && review !== 'pending') {
       throw new Error(`invalid review state: ${review}`)
     }
-    const memory = scope === 'bot' ? await this.botMemory(id) : await this.roomMemory(id)
+    const memory = scope === 'bot'
+      ? await this.botMemory(id)
+      : scope === 'team'
+        ? await this.teamMemory(id)
+        : await this.roomMemory(id)
     const atom = memory.atoms.find((item) => item.id === atomId)
     if (atom === undefined) throw new Error(`unknown memory atom: ${atomId}`)
     atom.review = review

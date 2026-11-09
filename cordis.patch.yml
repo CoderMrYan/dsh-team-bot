@@ -1,0 +1,8 @@
+# dsh-team-bot bundle layer.
+# A Host-only P0: room store, routing, and model-facing tools. The Web client
+# half lands in P2 and the real-Session runtime in P1.
+- insert:
+    - id: team-bot
+      name: 'dsh-team-bot'
+      config:
+        dataDir: ''

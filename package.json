@@ -1,0 +1,39 @@
+{
+  "name": "dsh-team-bot",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Native multi-agent group chat for DeepSeek Harness: shared rooms, private desks, group and per-bot memory.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/CoderMrYan/dsh-team-bot.git"
+  },
+  "icon": "./icon.svg",
+  "exports": {
+    ".": "./src/host/index.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "engines": {
+    "dsh": ">=0.2.1-rc.2"
+  },
+  "files": [
+    "src/**/*.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test test/store.test.js",
+    "check": "node --check src/host/index.js && node --check src/host/store.js && node --check src/host/routing.js && node --check src/host/tools.js"
+  }
+}

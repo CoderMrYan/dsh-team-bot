@@ -11,6 +11,12 @@ test('client bundle registers sidebar, main, and settings entries', () => {
   const React = {
     createElement: () => null,
     Fragment: 'fragment',
+    Component: class Component {
+      constructor(props) {
+        this.props = props
+        this.state = {}
+      }
+    },
     useCallback: (fn) => fn,
     useEffect: () => undefined,
     useState: (value) => [value, () => undefined],

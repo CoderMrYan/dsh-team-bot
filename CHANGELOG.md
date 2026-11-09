@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.12.3 — 2026-11-09
+
+### Fixed
+
+- Mobile team panel could show only the header/empty area because the body used `display: block` with `main { height: 100% }`. The mobile body is now a column flex container and the chat area uses `flex: 1`, so it fills the available height.
+- The panel is wrapped in an error boundary: a render failure now shows a readable message instead of a blank slot.
+
 ## 0.12.2 — 2026-11-09
 
 ### Added

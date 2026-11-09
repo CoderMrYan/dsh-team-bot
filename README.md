@@ -110,6 +110,24 @@ Room policy:
 }
 ```
 
+## Install
+
+```bash
+# from npm (once published)
+dsh plugin --profile web add dsh-team-bot
+
+# or from a checkout
+dsh plugin --profile web add D:\applications\dsh\dsh-team-bot
+```
+
+The directory can also be installed through the Plugins page (`plugin_manager install_bundle`). The Host half (tools, routes, memory) is live immediately; the Web client half mounts after one Harness restart when the package first gains `dsh.client`.
+
+```yaml
+- id: team-bot
+  config:
+    dataDir: ''   # default $DSH_HOME/dsh-team-bot
+```
+
 ## Develop
 
 ```bash

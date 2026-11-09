@@ -4,6 +4,22 @@
   "type": "module",
   "description": "Native multi-agent group chat for DeepSeek Harness: shared rooms, private desks, group and per-bot memory.",
   "license": "MIT",
+  "author": "CoderMrYan",
+  "homepage": "https://github.com/CoderMrYan/dsh-team-bot#readme",
+  "bugs": {
+    "url": "https://github.com/CoderMrYan/dsh-team-bot/issues"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "multi-agent",
+    "group-chat",
+    "agent-team"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/CoderMrYan/dsh-team-bot.git"
@@ -30,7 +46,13 @@
     }
   },
   "engines": {
+    "node": ">=20",
     "dsh": ">=0.2.1-rc.2"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": ">=4.0.5 <5",
+    "@deepseek-ai/dsh-tools": ">=0.2.1-rc.2",
+    "@deepseek-ai/schemastery": ">=3.19.0 <4"
   },
   "files": [
     "src/**/*.js",
@@ -39,6 +61,7 @@
     "locale/*.json",
     "icon.svg",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "scripts": {

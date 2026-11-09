@@ -131,6 +131,7 @@ Verified packaging:
 - `npm install <tarball>` → `added 1 package`
 - `npm publish --dry-run` → passes with public access
 - `npm view dsh-team-bot` → 404, so the name is free
+- Client bundle: registration smoke plus a React SSR render (title and empty state, ~1.5 kB HTML)
 
 ```yaml
 - id: team-bot

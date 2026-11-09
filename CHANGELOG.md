@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.2 — 2026-11-09
+
+### Fixed
+
+- The client module now declares `inject: ["slots"]`. Without it `ctx.slots` was undefined during activation, so the Web boot reported `dsh-team-bot: failed` instead of mounting the settings page.
+
 ## 0.5.1 — 2026-11-09
 
 ### Changed

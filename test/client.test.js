@@ -29,6 +29,8 @@ test('client bundle registers one settings.section page', () => {
   })
   assert.equal(row.id, 'dsh-team-bot')
   const module = row.factory(require)
+  assert.equal(module.inject.length, 1)
+  assert.equal(module.inject[0], 'slots')
   const registered = []
   const ctx = {
     slots: {

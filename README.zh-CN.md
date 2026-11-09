@@ -4,7 +4,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-> 状态：**0.11.0** — 共享房间、真实 Session 运行时、带审核队列的记忆、私聊/总管台、左侧栏 Web 面板、带头像的一句话建队、团队级共享记忆、团队重命名与自动团队摘要。从 GitHub 安装；npm 发布是可选项，暂未发布。
+> 状态：**0.12.0** — 共享房间、真实 Session 运行时、带审核队列的记忆、私聊/总管台、左侧栏 Web 面板、带头像的一句话建队、团队级共享记忆、团队重命名与自动团队摘要，以及手机布局。从 GitHub 安装；npm 发布是可选项，暂未发布。
 
 ## 为什么做这个
 
@@ -112,6 +112,8 @@ Bot 画像会持久化 `sessionId`，所以下一条房间消息会继续同一�
 ### Web 面板
 
 点击左侧栏 **团队群组**，或打开 **设置 → 团队群组**。房间按团队分组，可折叠，也可用搜索框过滤；页面包含成员 chips、带 Bot 头像的时间线、输入框、带 Bot 搜索的建房表单，以及房间/团队双 tab 的记忆抽屉。**管理** 可以改成员和总管、重命名团队，也可以删除房间或整个团队（带确认）。
+
+手机窄屏（小于 720px）下，房间列表变成带遮罩的抽屉，聊天占满宽度，顶部按钮自动换行，输入框会避开 iPhone 底部安全区。
 
 面板使用的路由：`health`、`state`、`client`、`templates`、`compose`、`rooms`（POST）、`rooms/:id`（PATCH/DELETE）、`rooms/:id/messages`、`rooms/:id/ask`、`rooms/:id/memory`、`rooms/:id/memory/review`、`teams/:teamId`（PATCH/DELETE）、`teams/:teamId/memory`、`teams/:teamId/memory/review`、`dms`。
 

@@ -4,7 +4,7 @@ Native multi-agent group chat for [DeepSeek Harness](https://github.com/deepseek
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-> Status: **0.11.0** — shared rooms, real-Session runtime, memory with review queue, private chats/chief desk, a left-sidebar Web panel, one-sentence team composition with avatars, team-wide memory, rename, and auto team summaries. Install from GitHub; npm publish is optional and not done.
+> Status: **0.12.0** — shared rooms, real-Session runtime, memory with review queue, private chats/chief desk, a left-sidebar Web panel, one-sentence team composition with avatars, team-wide memory, rename, auto team summaries, and a mobile layout. Install from GitHub; npm publish is optional and not done.
 
 ## Why
 
@@ -112,6 +112,8 @@ Bot profiles persist their `sessionId`, so the next room message continues the s
 ### Web panel
 
 Click **团队群组** in the left sidebar, or open **Settings → 团队群组**. Rooms are grouped under their team and can be collapsed or filtered with the search box; the page shows member chips, the timeline with bot avatars, a composer, room creation with Bot search, and a memory drawer with room/team tabs. **管理** edits members and chief, renames the team, and can delete the room or the whole team (with confirmation).
+
+On phones (viewport below 720px) the room list becomes a drawer with a backdrop, the chat fills the width, the header wraps, and the composer respects the safe area.
 
 Routes under `/dsh-team-bot/api`: `health`, `state`, `client`, `templates`, `compose`, `rooms` (POST), `rooms/:id` (PATCH/DELETE), `rooms/:id/messages`, `rooms/:id/ask`, `rooms/:id/memory`, `rooms/:id/memory/review`, `teams/:teamId` (PATCH/DELETE), `teams/:teamId/memory`, `teams/:teamId/memory/review`, `dms`.
 

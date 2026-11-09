@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.12.0 — 2026-11-09
+
+### Added
+
+- **Mobile layout for the team panel**: below 720px the room list becomes a drawer with a backdrop, the chat takes the full width, the header wraps, and the composer respects the iPhone safe area.
+
 ## 0.11.0 — 2026-11-09
 
 ### Fixed

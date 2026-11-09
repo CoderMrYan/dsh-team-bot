@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.12.1 — 2026-11-09
+
+### Fixed
+
+- iPhone horizontal page scroll: constrain the panel root/body/main, break long message text, and let flex inputs shrink.
+- iOS auto-zoom on input focus: textarea, text inputs, and selects use 16px on mobile, so the send button no longer shifts under the keyboard.
+- Memory, manage, AI compose, and create-room panels are now bottom sheets with a backdrop, close control, 78vh max height, and safe-area padding.
+- The phone room drawer is narrower (74%, max 280px) and room names truncate without widening it.
+
 ## 0.12.0 — 2026-11-09
 
 ### Added

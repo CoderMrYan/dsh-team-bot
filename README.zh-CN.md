@@ -4,7 +4,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-> 状态：**0.6.1** — 共享房间、真实 Session 运行时、带审核队列的记忆、私聊/总管台，以及可从左侧栏直接进入的 Web 面板。从 GitHub 安装；npm 发布是可选项，暂未发布。
+> 状态：**0.7.0** — 共享房间、真实 Session 运行时、带审核队列的记忆、私聊/总管台、左侧栏 Web 面板，以及带头像的一句话建队。从 GitHub 安装；npm 发布是可选项，暂未发布。
 
 ## 为什么做这个
 
@@ -18,6 +18,23 @@ DSH 已经有单 Agent、子 Agent，以及实验性的 Agent Teams 运行时。
 - **总管台 + 私聊** — 总管有自己的 Session，可以把结论带回群里，也可以把活拆给成员。
 - **记忆** — 群共享记忆（L0 原始消息 → L1 事实 → L2 摘要 → L3 画像）加每个 Bot 的私有记忆。
 - **真实 Session** — 每个 Bot 背后都是一个真实的 DSH Session，因此工具、审批、流式输出、搜索、模型选择都是继承来的，不是重写的。
+- **一句话建队** — 描述目标（「我要做一个短视频团队」），插件自动创建角色、主群，以及带各自总管的分组。
+
+### 一句话建队
+
+`team_compose({ brief })` 会匹配内置模板，一次创建完整团队：
+
+```text
+短视频团队 → 总导演 / 制片 / 编剧 / 前期导演 / 后期导演 / 剪辑师 / 声音设计 / 视觉设计
+            主群 + 前期组（编剧、前期导演、制片，chief 前期导演）
+                 + 后期组（后期导演、剪辑师、声音设计、视觉设计，chief 后期导演）
+软件项目团队 → 项目经理 / 产品经理 / UI/UX 设计 / 前端 / 后端 / 测试
+            主群 + 产品组 / 开发组 / 测试组
+```
+
+`team_template_list` 列出模板；`team_room_update` 可以改成员，或把同一个总管嫁接到另一个群。
+
+每个 Bot 和房间都有确定性的 `{hue, variant}` 头像，面板用 SVG 渐变脸绘制。面板的 **AI 建队** 按钮调用同一个 `POST /compose`。
 
 ## 目录结构
 
@@ -41,7 +58,10 @@ test/           store、routing、runtime、memory、client-bundle 测试
 |---|---|
 | `team_bot_create` | 创建具名 Bot 画像（角色、人设、模型、workspace） |
 | `team_bot_list` | 列出画像及绑定的 Session id |
+| `team_compose` | 一句话创建整个团队：Bot、主群、分组 |
+| `team_template_list` | 列出内置团队模板 |
 | `team_room_create` | 创建房间，指定成员、总管、回复策略 |
+| `team_room_update` | 修改成员/总管/策略，或把总管嫁接到其他群 |
 | `team_room_list` | 列出房间 |
 | `team_room_post` | 追加一条消息并返回被路由的 Bot（只写存储） |
 | `team_room_ask` | 追加人类消息，把被路由的 Bot 作为真实 turn 执行，并回写回复 |
@@ -166,6 +186,7 @@ node --check src/host/index.js
 - [x] P3.6 记忆审核队列与面板抽屉：pending 不进入 prompt，接受/拒绝，增删，摘要
 - [x] P4 打包与 CI：npm 元数据、peer deps、CHANGELOG、GitHub Actions
 - [x] P5 GitHub 发布路径：SSH 推送完成；`dsh plugin add github:CoderMrYan/dsh-team-bot` 已验证
+- [x] P6 一句话建队：团队模板、分组、总管嫁接、确定性头像、面板 AI 建队
 - [ ] npm publish（可选，暂缓）
 
 ## 设计参考

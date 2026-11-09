@@ -4,7 +4,7 @@ Native multi-agent group chat for [DeepSeek Harness](https://github.com/deepseek
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-> Status: **0.6.1** — shared rooms, real-Session runtime, memory with review queue, private chats/chief desk, and a Web panel reachable from the left sidebar. Install from GitHub; npm publish is optional and not done.
+> Status: **0.7.0** — shared rooms, real-Session runtime, memory with review queue, private chats/chief desk, a left-sidebar Web panel, and one-sentence team composition with avatars. Install from GitHub; npm publish is optional and not done.
 
 ## Why
 
@@ -18,6 +18,23 @@ DSH already has single agents, subagents, and an experimental Agent Teams runtim
 - **Chief desk + private chats** — the chief has its own session, can bring conclusions back to the room, and can hand work to members.
 - **Memory** — shared room memory (L0 raw → L1 facts → L2 summary → L3 persona) plus per-bot private memory.
 - **Real sessions** — each bot is backed by a real DSH session, so tools, approvals, streaming, search, and model selection are inherited rather than reimplemented.
+- **One-sentence teams** — describe the goal ("我要做一个短视频团队") and the plugin creates the roles, the main room, and sub-rooms with their own chiefs.
+
+### One-sentence teams
+
+`team_compose({ brief })` matches a built-in archetype and creates everything in one call:
+
+```text
+短视频团队 → 总导演 / 制片 / 编剧 / 前期导演 / 后期导演 / 剪辑师 / 声音设计 / 视觉设计
+            主群 + 前期组（编剧、前期导演、制片，chief 前期导演）
+                 + 后期组（后期导演、剪辑师、声音设计、视觉设计，chief 后期导演）
+软件项目团队 → 项目经理 / 产品经理 / UI/UX 设计 / 前端 / 后端 / 测试
+            主群 + 产品组 / 开发组 / 测试组
+```
+
+`team_template_list` lists the archetypes; `team_room_update` changes members or grafts the same chief onto another room.
+
+Every bot and room gets a deterministic `{hue, variant}` avatar; the panel draws it as an SVG gradient face. The panel's **AI 建队** button calls `POST /compose` with the same templates.
 
 ## Layout
 
@@ -41,7 +58,10 @@ Tools:
 |---|---|
 | `team_bot_create` | create a named bot profile (role, persona, model, workspace) |
 | `team_bot_list` | list profiles and their bound Session ids |
+| `team_compose` | create a whole team from one sentence, with bots, main room, and sub-rooms |
+| `team_template_list` | list the built-in team archetypes |
 | `team_room_create` | create a room with members, chief, reply policy |
+| `team_room_update` | change members/chief/policy, or graft a chief onto another room |
 | `team_room_list` | list rooms |
 | `team_room_post` | append a message and return the routed bots (store only) |
 | `team_room_ask` | append a human message, run the routed bots as real turns, append their replies |
@@ -164,6 +184,7 @@ The repo is a DSH bundle. Install the directory with `plugin_manager install_bun
 - [x] P3.6 memory review queue and panel drawer: pending atoms stay out of prompts, accept/reject, add/delete, summary
 - [x] P4 packaging and CI: npm metadata, peer deps, CHANGELOG, GitHub Actions
 - [x] P5 GitHub release path: SSH push done; `dsh plugin add github:CoderMrYan/dsh-team-bot` verified
+- [x] P6 one-sentence teams: archetypes, sub-rooms, chief grafting, deterministic avatars, panel AI 建队
 - [ ] npm publish (optional, deferred)
 
 ## Design references

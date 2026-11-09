@@ -12,6 +12,7 @@ import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { routeMessage } from './routing.js'
 import { defaultMemory, mergeAtoms, normalizeMemory } from './memory.js'
+import { createAvatar } from './avatars.js'
 
 const STATE_VERSION = 1
 const REPLY_MODES = new Set(['mention', 'admin', 'auto'])
@@ -68,6 +69,14 @@ export class TeamStore {
       if (error?.code !== 'ENOENT') throw error
       this.state = emptyState()
     }
+    for (const bot of Object.values(this.state.bots)) {
+      bot.teamId = String(bot.teamId ?? '')
+      if (bot.avatar === undefined) bot.avatar = createAvatar(bot.name, 'bot')
+    }
+    for (const room of Object.values(this.state.rooms)) {
+      room.teamId = String(room.teamId ?? '')
+      if (room.avatar === undefined) room.avatar = createAvatar(room.name, 'room')
+    }
     this.loaded = true
   }
 
@@ -121,7 +130,6 @@ export class TeamStore {
     await this.init()
     const name = String(input.name ?? '').trim()
     if (name === '') throw new Error('bot name is required')
-    this.assertBotNameFree(name)
     const bot = {
       id: newId('bot'),
       name,
@@ -129,6 +137,9 @@ export class TeamStore {
       persona: String(input.persona ?? '').trim(),
       model: String(input.model ?? '').trim(),
       workspace: String(input.workspace ?? '').trim(),
+      teamId: String(input.teamId ?? ''),
+      hidden: input.hidden === true,
+      avatar: input.avatar ?? createAvatar(name, 'bot'),
       sessionId: '',
       createdAt: new Date().toISOString(),
     }
@@ -172,9 +183,32 @@ export class TeamStore {
       chiefId: chiefId !== '' ? chiefId : (members[0] ?? ''),
       policy: normalizePolicy(input.policy ?? {}),
       note: '',
+      teamId: String(input.teamId ?? ''),
+      avatar: input.avatar ?? createAvatar(name, 'room'),
       createdAt: new Date().toISOString(),
     }
     this.state.rooms[room.id] = room
+    await this.save()
+    return room
+  }
+
+  /** Update a room's members, chief, or policy. */
+  async updateRoom(roomId, patch = {}) {
+    await this.init()
+    const room = this.getRoom(roomId)
+    if (patch.members !== undefined) {
+      const members = [...new Set((patch.members ?? []).map(String))]
+      if (members.length === 0) throw new Error('room needs at least one member')
+      for (const memberId of members) this.getBot(memberId)
+      room.members = members
+      if (!members.includes(room.chiefId)) room.chiefId = members[0]
+    }
+    if (patch.chiefId !== undefined) {
+      const chiefId = String(patch.chiefId)
+      if (!room.members.includes(chiefId)) throw new Error(`chief is not a room member: ${chiefId}`)
+      room.chiefId = chiefId
+    }
+    if (patch.policy !== undefined) room.policy = normalizePolicy({ ...room.policy, ...patch.policy })
     await this.save()
     return room
   }

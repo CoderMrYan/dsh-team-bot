@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.7.0 — 2026-11-09
+
+### Added
+
+- **One-sentence teams**: `team_compose` matches a built-in archetype (short-video, software, content, research), creates every bot, a main room, and sub-rooms with their own chiefs.
+- **Team archetypes**: 短视频团队（8 roles / 前期组 / 后期组）, 软件项目团队（6 roles / 产品组 / 开发组 / 测试组）, 内容团队, 研究团队.
+- **Bot and room avatars**: deterministic `{hue, variant}` descriptors; the panel draws them as SVG gradient faces.
+- **`team_room_update`**: change members/chief/policy, including grafting the same chief onto multiple rooms.
+- **Panel AI 建队**: template chips and a free-text brief, plus avatars in the room list and member chips.
+
+### Changed
+
+- Bot names may repeat across teams (role names such as 导演 or 审校 are no longer globally unique).
+
 ## 0.6.1 — 2026-11-09
 
 ### Added

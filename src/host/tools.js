@@ -7,6 +7,8 @@
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { askDirect, askRoom } from './actions.js'
 import { createAtom, createPersonaItem } from './memory.js'
+import { composeTeam } from './compose.js'
+import { listTemplates } from './templates.js'
 
 const ANY_OBJECT = { type: 'object', additionalProperties: true }
 
@@ -26,6 +28,36 @@ function jsonOutput(schema = ANY_OBJECT) {
  */
 export function createTools(store, runtime) {
   return [
+    defineTool({
+      name: 'team_compose',
+      description:
+        'Create a whole team from one sentence: pick a built-in archetype, create all bots, one main room, and sub-rooms each with its own chief.',
+      parameters: {
+        brief: { type: 'string', required: true, description: 'What the user wants, such as "我要做一个短视频团队".' },
+        template: { type: 'string', enum: ['short-video', 'software', 'content', 'research'], description: 'Optional explicit archetype; otherwise matched from the brief.' },
+        name: { type: 'string', description: 'Optional team name; defaults to the template name.' },
+      },
+      output: jsonOutput(),
+      timeoutMs: 120_000,
+      async execute(args) {
+        return await composeTeam(store, {
+          brief: args.brief,
+          templateId: args.template,
+          name: args.name,
+        })
+      },
+    }),
+
+    defineTool({
+      name: 'team_template_list',
+      description: 'List the built-in team archetypes that team_compose can create.',
+      parameters: {},
+      output: jsonOutput(),
+      async execute() {
+        return { templates: listTemplates() }
+      },
+    }),
+
     defineTool({
       name: 'team_bot_create',
       description:
@@ -78,6 +110,30 @@ export function createTools(store, runtime) {
             replyMode: args.reply_mode,
             maxSpeakers: args.max_speakers,
             hopLimit: args.hop_limit,
+          },
+        })
+      },
+    }),
+
+    defineTool({
+      name: 'team_room_update',
+      description: 'Update one room: members, chief, or reply policy. The same bot can be chief of several rooms.',
+      parameters: {
+        room_id: { type: 'string', required: true, description: 'Room id.' },
+        members: { type: 'array', items: { type: 'string' }, description: 'New member bot ids.' },
+        chief_id: { type: 'string', description: 'New chief bot id; must be a member.' },
+        reply_mode: { type: 'string', enum: ['mention', 'admin', 'auto'], description: 'New reply mode.' },
+        max_speakers: { type: 'integer', description: 'New max speakers (1-8).' },
+      },
+      output: jsonOutput(),
+      async execute(args) {
+        await store.init()
+        return await store.updateRoom(args.room_id, {
+          members: args.members,
+          chiefId: args.chief_id,
+          policy: {
+            ...(args.reply_mode === undefined ? {} : { replyMode: args.reply_mode }),
+            ...(args.max_speakers === undefined ? {} : { maxSpeakers: args.max_speakers }),
           },
         })
       },

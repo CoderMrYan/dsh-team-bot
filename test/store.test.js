@@ -29,13 +29,17 @@ async function freshRoom(policy = {}) {
   return { dir, store, room, bots: [a, b, c] }
 }
 
-test('create and list bots, reject duplicate names', async () => {
+test('create and list bots, allowing duplicate role names', async () => {
   const { store, dir } = await freshStore()
   try {
     const bot = await store.createBot({ name: 'alice', role: 'researcher', persona: 'find facts' })
     assert.equal(bot.name, 'alice')
+    assert.equal(bot.avatar.hue >= 0, true)
     assert.equal(store.listBots().length, 1)
-    await assert.rejects(() => store.createBot({ name: 'ALICE', role: 'dup' }), /already used/)
+    const second = await store.createBot({ name: 'ALICE', role: 'dup' })
+    assert.equal(second.name, 'ALICE')
+    assert.notEqual(second.id, bot.id)
+    assert.equal(store.listBots().length, 2)
   } finally {
     await rm(dir, { recursive: true, force: true })
   }
@@ -55,6 +59,25 @@ test('room validates members and defaults its chief to the first member', async 
     assert.deepEqual(room.members, [a.id, b.id])
     assert.equal(room.policy.replyMode, 'mention')
     assert.equal(room.policy.maxSpeakers, 3)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('updateRoom can move members and graft the same chief onto two rooms', async () => {
+  const { store, dir } = await freshStore()
+  try {
+    const a = await store.createBot({ name: 'alice', role: 'chief' })
+    const b = await store.createBot({ name: 'bob', role: 'member' })
+    const c = await store.createBot({ name: 'carol', role: 'member' })
+    const first = await store.createRoom({ name: 'first', members: [a.id, b.id], chiefId: a.id })
+    const second = await store.createRoom({ name: 'second', members: [b.id, c.id], chiefId: b.id })
+    const updated = await store.updateRoom(first.id, { members: [a.id, b.id, c.id], chiefId: c.id })
+    assert.deepEqual(updated.members, [a.id, b.id, c.id])
+    assert.equal(updated.chiefId, c.id)
+    const grafted = await store.updateRoom(second.id, { chiefId: c.id })
+    assert.equal(grafted.chiefId, c.id)
+    await assert.rejects(() => store.updateRoom(second.id, { chiefId: a.id }), /not a room member/)
   } finally {
     await rm(dir, { recursive: true, force: true })
   }

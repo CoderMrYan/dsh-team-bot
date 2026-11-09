@@ -7,6 +7,8 @@
  */
 import { askDirect, askRoom } from './actions.js'
 import { createAtom } from './memory.js'
+import { composeTeam } from './compose.js'
+import { listTemplates } from './templates.js'
 
 const PREFIX = '/dsh-team-bot/api'
 
@@ -56,6 +58,24 @@ export function registerRoutes(ctx, store, runtime) {
         if (parts[0] === 'state' && req.method === 'GET') {
           await store.init()
           sendJson(res, 200, { bots: store.listBots(), rooms: store.listRooms() })
+          return
+        }
+        if (parts[0] === 'templates' && req.method === 'GET') {
+          sendJson(res, 200, { templates: listTemplates() })
+          return
+        }
+        if (parts[0] === 'compose' && req.method === 'POST') {
+          const body = await readJson(req)
+          const brief = typeof body.brief === 'string' ? body.brief.trim() : ''
+          if (brief === '') {
+            sendJson(res, 400, { error: 'brief is required' })
+            return
+          }
+          sendJson(res, 200, await composeTeam(store, {
+            brief,
+            templateId: typeof body.template === 'string' ? body.template : undefined,
+            name: typeof body.name === 'string' ? body.name : undefined,
+          }))
           return
         }
         if (parts[0] === 'client' && req.method === 'GET') {

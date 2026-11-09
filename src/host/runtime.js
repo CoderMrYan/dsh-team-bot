@@ -6,6 +6,7 @@
  * assistant text and returns it to the room.
  */
 import { randomUUID } from 'node:crypto'
+import { formatMemory } from './memory.js'
 
 /** @returns {Promise<void>} a sleep helper bound to the caller's signal. */
 function sleep(ms, signal) {
@@ -31,7 +32,7 @@ export function textOf(content) {
 }
 
 /** @returns {string} the model-facing room prompt for one bot turn. */
-export function buildRoomPrompt(room, bot, messages) {
+export function buildRoomPrompt(room, bot, messages, memory) {
   const recent = messages
     .slice(-12)
     .map((message) => {
@@ -39,9 +40,12 @@ export function buildRoomPrompt(room, bot, messages) {
       return `[${who}] ${String(message.text).slice(0, 500)}`
     })
     .join('\n')
+  const query = memory?.query ?? messages.at(-1)?.text ?? ''
+  const memoryBlock = memory === undefined ? '' : formatMemory(memory.roomMemory, memory.botMemory, query)
+  const memorySection = memoryBlock === '' ? '' : `\n\n${memoryBlock}`
   return `You are "${bot.name}", ${bot.role}, in the DSH group room "${room.name}".
 
-${bot.persona}
+${bot.persona}${memorySection}
 
 Recent room messages (oldest first):
 ${recent}

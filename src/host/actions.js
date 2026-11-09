@@ -2,6 +2,7 @@
  * Room actions shared by the model tool and the Web API.
  */
 import { buildRoomPrompt } from './runtime.js'
+import { buildSummary, captureFromHuman } from './memory.js'
 
 /**
  * Append a human message, run every routed bot as a real Session turn, and
@@ -22,11 +23,16 @@ export async function askRoom(store, runtime, input, signal) {
     mentions: input.mentions,
   })
   const replies = []
+  const captured = captureFromHuman(message.text, message.id)
+  if (captured !== undefined) await store.rememberRoom(room.id, captured)
+  const roomMemory = await store.roomMemory(room.id)
   for (const botId of routed) {
     const bot = store.getBot(botId)
     try {
       const history = await store.history(room.id, 12)
-      const prompt = buildRoomPrompt(room, bot, history)
+      const botMemory = await store.botMemory(bot.id)
+      const query = [message.text, ...history.slice(-3).map((item) => item.text)].join('\n')
+      const prompt = buildRoomPrompt(room, bot, history, { roomMemory, botMemory, query })
       const text = (await runtime.ask(bot, prompt, signal)).trim()
       if (text === '' || text === '[PASS]') {
         replies.push({ bot: bot.name, skipped: true })
@@ -42,5 +48,6 @@ export async function askRoom(store, runtime, input, signal) {
       replies.push({ bot: bot.name, error: error instanceof Error ? error.message : String(error) })
     }
   }
+  await store.setRoomSummary(room.id, buildSummary(await store.history(room.id, 8)))
   return { posted: message, routed, replies }
 }

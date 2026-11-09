@@ -1,6 +1,6 @@
 {
   "name": "dsh-team-bot",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "description": "Native multi-agent group chat for DeepSeek Harness: shared rooms, private desks, group and per-bot memory.",
   "license": "MIT",
@@ -42,7 +42,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "test": "node --test test/store.test.js test/runtime.test.js test/client.test.js",
-    "check": "node --check src/host/index.js && node --check src/host/store.js && node --check src/host/routing.js && node --check src/host/runtime.js && node --check src/host/tools.js && node --check src/host/actions.js && node --check src/host/routes.js && node --check lib/client.js"
+    "test": "node --test test/store.test.js test/runtime.test.js test/memory.test.js test/client.test.js",
+    "check": "node --check src/host/index.js && node --check src/host/store.js && node --check src/host/routing.js && node --check src/host/runtime.js && node --check src/host/memory.js && node --check src/host/tools.js && node --check src/host/actions.js && node --check src/host/routes.js && node --check lib/client.js"
   }
 }

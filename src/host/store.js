@@ -11,6 +11,7 @@ import { appendFile, mkdir, readFile, rename, rm, writeFile } from 'node:fs/prom
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { routeMessage } from './routing.js'
+import { defaultMemory, mergeAtoms, normalizeMemory } from './memory.js'
 
 const STATE_VERSION = 1
 const REPLY_MODES = new Set(['mention', 'admin', 'auto'])
@@ -227,26 +228,76 @@ export class TeamStore {
       .map((line) => JSON.parse(line))
   }
 
-  /** Read shared room memory, or an empty shell before P3 writes it. */
+  /** Read shared room memory. */
   async roomMemory(roomId) {
     await this.init()
     this.getRoom(roomId)
-    return this.readJson(path.join(this.root, 'memory', 'room', `${roomId}.json`), {
-      atoms: [],
-      summary: '',
-      persona: {},
-    })
+    return normalizeMemory(await this.readJson(this.memoryPath('room', roomId), defaultMemory()))
   }
 
-  /** Read one bot's private memory, or an empty shell before P3 writes it. */
+  /** Read one bot's private memory. */
   async botMemory(botId) {
     await this.init()
     this.getBot(botId)
-    return this.readJson(path.join(this.root, 'memory', 'bot', `${botId}.json`), {
-      atoms: [],
-      summary: '',
-      persona: {},
-    })
+    return normalizeMemory(await this.readJson(this.memoryPath('bot', botId), defaultMemory()))
+  }
+
+  /** @returns {string} absolute memory document path. */
+  memoryPath(scope, id) {
+    return path.join(this.root, 'memory', scope, `${id}.json`)
+  }
+
+  /** Persist one memory document. */
+  async saveMemory(scope, id, memory) {
+    memory.updatedAt = Date.now()
+    await this.writeJson(this.memoryPath(scope, id), memory)
+    return normalizeMemory(memory)
+  }
+
+  /** Add or supersede one shared atom. */
+  async rememberRoom(roomId, atom) {
+    const memory = await this.roomMemory(roomId)
+    const merged = mergeAtoms(memory.atoms, atom)
+    memory.atoms = merged.atoms
+    await this.saveMemory('room', roomId, memory)
+    return { memory, ...merged }
+  }
+
+  /** Add or supersede one private atom. */
+  async rememberBot(botId, atom) {
+    const memory = await this.botMemory(botId)
+    const merged = mergeAtoms(memory.atoms, atom)
+    memory.atoms = merged.atoms
+    await this.saveMemory('bot', botId, memory)
+    return { memory, ...merged }
+  }
+
+  /** Remove one shared atom. */
+  async forgetRoom(roomId, atomId) {
+    const memory = await this.roomMemory(roomId)
+    memory.atoms = memory.atoms.filter((atom) => atom.id !== atomId)
+    return await this.saveMemory('room', roomId, memory)
+  }
+
+  /** Remove one private atom. */
+  async forgetBot(botId, atomId) {
+    const memory = await this.botMemory(botId)
+    memory.atoms = memory.atoms.filter((atom) => atom.id !== atomId)
+    return await this.saveMemory('bot', botId, memory)
+  }
+
+  /** Replace the shared extractive summary. */
+  async setRoomSummary(roomId, summary) {
+    const memory = await this.roomMemory(roomId)
+    memory.summary = String(summary ?? '').slice(0, 1200)
+    return await this.saveMemory('room', roomId, memory)
+  }
+
+  /** Add one standing preference to a bot's private memory. */
+  async addPersona(botId, item) {
+    const memory = await this.botMemory(botId)
+    memory.persona = [...memory.persona.filter((entry) => entry.text !== item.text), item].slice(-12)
+    return await this.saveMemory('bot', botId, memory)
   }
 
   /** @returns {Promise<object>} parsed JSON, or `fallback` when absent. */
@@ -257,5 +308,14 @@ export class TeamStore {
       if (error?.code === 'ENOENT') return fallback
       throw error
     }
+  }
+
+  /** Atomically write one JSON document. */
+  async writeJson(file, value) {
+    await mkdir(path.dirname(file), { recursive: true })
+    const temp = `${file}.tmp`
+    await writeFile(temp, JSON.stringify(value, null, 2), 'utf8')
+    await rm(file, { force: true })
+    await rename(temp, file)
   }
 }

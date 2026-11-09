@@ -6,6 +6,7 @@
  */
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { askRoom } from './actions.js'
+import { createAtom, createPersonaItem } from './memory.js'
 
 const ANY_OBJECT = { type: 'object', additionalProperties: true }
 
@@ -160,7 +161,7 @@ export function createTools(store, runtime) {
 
     defineTool({
       name: 'team_room_memory',
-      description: 'Read shared room memory and, when given a bot, that bot private memory. P3 fills these stores.',
+      description: 'Read shared room memory and, when given a bot, that bot private memory.',
       parameters: {
         room_id: { type: 'string', required: true, description: 'Room id.' },
         bot_id: { type: 'string', description: 'Optional bot id for its private memory.' },
@@ -170,6 +171,72 @@ export function createTools(store, runtime) {
         const room = await store.roomMemory(args.room_id)
         const bot = typeof args.bot_id === 'string' && args.bot_id !== '' ? await store.botMemory(args.bot_id) : undefined
         return bot === undefined ? { room } : { room, bot }
+      },
+    }),
+
+    defineTool({
+      name: 'team_memory_remember',
+      description:
+        'Remember one fact in shared room memory or a bot private memory. Same key supersedes the old value; a near-duplicate is skipped.',
+      parameters: {
+        room_id: { type: 'string', required: true, description: 'Room id.' },
+        text: { type: 'string', required: true, description: 'The fact to remember.' },
+        key: { type: 'string', description: 'Stable key; reusing it supersedes the old atom.' },
+        scope: { type: 'string', enum: ['room', 'bot'], description: 'room (shared) or bot (private); defaults to room.' },
+        bot_id: { type: 'string', description: 'Required when scope=bot.' },
+        importance: { type: 'number', description: '0-1 importance, default 0.5.' },
+      },
+      output: jsonOutput(),
+      async execute(args) {
+        await store.init()
+        const atom = createAtom({
+          text: args.text,
+          key: args.key,
+          importance: args.importance,
+          source: 'tool',
+        })
+        if (args.scope === 'bot') {
+          if (typeof args.bot_id !== 'string' || args.bot_id === '') throw new Error('bot_id is required when scope=bot')
+          return await store.rememberBot(args.bot_id, atom)
+        }
+        return await store.rememberRoom(args.room_id, atom)
+      },
+    }),
+
+    defineTool({
+      name: 'team_memory_forget',
+      description: 'Remove one shared or private memory atom by id.',
+      parameters: {
+        room_id: { type: 'string', required: true, description: 'Room id.' },
+        atom_id: { type: 'string', required: true, description: 'Memory atom id from team_room_memory.' },
+        scope: { type: 'string', enum: ['room', 'bot'], description: 'room (shared) or bot (private); defaults to room.' },
+        bot_id: { type: 'string', description: 'Required when scope=bot.' },
+      },
+      output: jsonOutput(),
+      async execute(args) {
+        await store.init()
+        if (args.scope === 'bot') {
+          if (typeof args.bot_id !== 'string' || args.bot_id === '') throw new Error('bot_id is required when scope=bot')
+          return { memory: await store.forgetBot(args.bot_id, args.atom_id) }
+        }
+        return { memory: await store.forgetRoom(args.room_id, args.atom_id) }
+      },
+    }),
+
+    defineTool({
+      name: 'team_memory_persona',
+      description: 'Add one standing preference to a bot private memory (L3 persona).',
+      parameters: {
+        room_id: { type: 'string', required: true, description: 'Room id; validates the bot belongs to this room.' },
+        bot_id: { type: 'string', required: true, description: 'Bot id.' },
+        text: { type: 'string', required: true, description: 'Standing preference, such as "回答控制在 100 字内".' },
+      },
+      output: jsonOutput(),
+      async execute(args) {
+        await store.init()
+        const room = store.getRoom(args.room_id)
+        if (!room.members.includes(args.bot_id)) throw new Error(`bot is not a member of this room: ${args.bot_id}`)
+        return { memory: await store.addPersona(args.bot_id, createPersonaItem(args.text)) }
       },
     }),
   ]

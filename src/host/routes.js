@@ -6,6 +6,7 @@
  * diverge.
  */
 import { askRoom } from './actions.js'
+import { createAtom } from './memory.js'
 
 const PREFIX = '/dsh-team-bot/api'
 
@@ -106,6 +107,44 @@ export function registerRoutes(ctx, store, runtime) {
           const room = await store.roomMemory(roomId)
           const bot = botId === '' ? undefined : await store.botMemory(botId)
           sendJson(res, 200, bot === undefined ? { room } : { room, bot })
+          return
+        }
+        if (parts[2] === 'memory' && req.method === 'POST') {
+          const body = await readJson(req)
+          const atom = createAtom({
+            text: typeof body.text === 'string' ? body.text : '',
+            key: typeof body.key === 'string' ? body.key : undefined,
+            importance: typeof body.importance === 'number' ? body.importance : undefined,
+            source: 'api',
+          })
+          if (body.scope === 'bot') {
+            if (typeof body.bot_id !== 'string' || body.bot_id === '') {
+              sendJson(res, 400, { error: 'bot_id is required when scope=bot' })
+              return
+            }
+            sendJson(res, 200, await store.rememberBot(body.bot_id, atom))
+            return
+          }
+          sendJson(res, 200, await store.rememberRoom(roomId, atom))
+          return
+        }
+        if (parts[2] === 'memory' && req.method === 'DELETE') {
+          const atomId = url.searchParams.get('atom') ?? ''
+          if (atomId === '') {
+            sendJson(res, 400, { error: 'atom is required' })
+            return
+          }
+          const scope = url.searchParams.get('scope') ?? 'room'
+          if (scope === 'bot') {
+            const botId = url.searchParams.get('bot') ?? ''
+            if (botId === '') {
+              sendJson(res, 400, { error: 'bot is required when scope=bot' })
+              return
+            }
+            sendJson(res, 200, { memory: await store.forgetBot(botId, atomId) })
+            return
+          }
+          sendJson(res, 200, { memory: await store.forgetRoom(roomId, atomId) })
           return
         }
         if (parts[2] === 'ask' && req.method === 'POST') {

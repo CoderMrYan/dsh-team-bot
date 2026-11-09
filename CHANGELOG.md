@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.1 — 2026-11-09
+
+### Changed
+
+- Sidebar room search: filter by room or team name; matching teams expand automatically.
+- Team header hover background, count badge, and a clearer chevron.
+- The manual create-room form has a Bot search field and shows Bot avatars.
+
 ## 0.9.0 — 2026-11-09
 
 ### Added

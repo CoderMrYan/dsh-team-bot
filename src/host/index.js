@@ -8,10 +8,11 @@ import os from 'node:os'
 import path from 'node:path'
 import z from '@deepseek-ai/schemastery'
 import { TeamStore } from './store.js'
+import { BotRuntime } from './runtime.js'
 import { createTools } from './tools.js'
 
 export const name = 'team-bot'
-export const inject = ['tools']
+export const inject = ['tools', 'sessionController']
 
 export const Config = z.object({
   dataDir: z.string().default(''),
@@ -28,8 +29,9 @@ export function apply(ctx, config = {}) {
     ? config.dataDir
     : path.join(home, 'dsh-team-bot')
   const store = new TeamStore(dataDir)
+  const runtime = new BotRuntime(ctx, store)
   const disposers = []
-  for (const definition of createTools(store)) disposers.push(ctx.tools.register(definition))
+  for (const definition of createTools(store, runtime)) disposers.push(ctx.tools.register(definition))
   ctx.effect(() => () => {
     for (const dispose of disposers.reverse()) dispose()
   }, 'team-bot.tools()')

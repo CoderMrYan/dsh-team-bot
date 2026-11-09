@@ -127,6 +127,7 @@ export class TeamStore {
       persona: String(input.persona ?? '').trim(),
       model: String(input.model ?? '').trim(),
       workspace: String(input.workspace ?? '').trim(),
+      sessionId: '',
       createdAt: new Date().toISOString(),
     }
     this.state.bots[bot.id] = bot

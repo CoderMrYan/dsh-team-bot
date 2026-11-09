@@ -5,6 +5,7 @@
  * decisions. P1 adds the real-Session runtime that turns `routed` into replies.
  */
 import { defineTool } from '@deepseek-ai/dsh-tools'
+import { buildRoomPrompt } from './runtime.js'
 
 const ANY_OBJECT = { type: 'object', additionalProperties: true }
 
@@ -17,11 +18,12 @@ function jsonOutput(schema = ANY_OBJECT) {
 }
 
 /**
- * Build every P0 tool against one store.
+ * Build every tool against one store and the real-Session runtime.
  * @param {import('./store.js').TeamStore} store
+ * @param {import('./runtime.js').BotRuntime} runtime
  * @returns {object[]} tool definitions ready for `ctx.tools.register()`.
  */
-export function createTools(store) {
+export function createTools(store, runtime) {
   return [
     defineTool({
       name: 'team_bot_create',
@@ -119,6 +121,51 @@ export function createTools(store) {
           text: args.text,
           mentions: args.mentions,
         })
+      },
+    }),
+
+    defineTool({
+      name: 'team_room_ask',
+      description:
+        'Post a human message and run the routed bots as real DSH Session turns. Returns each bot reply and appends it to the room timeline.',
+      parameters: {
+        room_id: { type: 'string', required: true, description: 'Room id.' },
+        text: { type: 'string', required: true, description: 'Human message text.' },
+        mentions: { type: 'array', items: { type: 'string' }, description: 'Bot ids explicitly mentioned.' },
+      },
+      output: jsonOutput(),
+      timeoutMs: 600_000,
+      async execute(args, exec) {
+        await store.init()
+        const room = store.getRoom(args.room_id)
+        const { message, routed } = await store.postMessage({
+          roomId: room.id,
+          sender: { type: 'human', name: 'human' },
+          text: args.text,
+          mentions: args.mentions,
+        })
+        const replies = []
+        for (const botId of routed) {
+          const bot = store.getBot(botId)
+          try {
+            const history = await store.history(room.id, 12)
+            const prompt = buildRoomPrompt(room, bot, history)
+            const text = (await runtime.ask(bot, prompt, exec.signal)).trim()
+            if (text === '' || text === '[PASS]') {
+              replies.push({ bot: bot.name, skipped: true })
+              continue
+            }
+            const posted = await store.postMessage({
+              roomId: room.id,
+              sender: { type: 'bot', id: bot.id, name: bot.name },
+              text,
+            })
+            replies.push({ bot: bot.name, message_id: posted.message.id, text })
+          } catch (error) {
+            replies.push({ bot: bot.name, error: error instanceof Error ? error.message : String(error) })
+          }
+        }
+        return { posted: message, routed, replies }
       },
     }),
 

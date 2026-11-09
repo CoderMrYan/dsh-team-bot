@@ -133,6 +133,26 @@ export function registerRoutes(ctx, store, runtime) {
           sendJson(res, 200, bot === undefined ? { room } : { room, bot })
           return
         }
+        if (parts[2] === 'memory' && parts[3] === 'review' && req.method === 'POST') {
+          const body = await readJson(req)
+          const atomId = typeof body.atom_id === 'string' ? body.atom_id : ''
+          const action = body.action
+          if (atomId === '' || (action !== 'accept' && action !== 'reject' && action !== 'pending')) {
+            sendJson(res, 400, { error: 'atom_id and a valid action are required' })
+            return
+          }
+          const review = action === 'accept' ? 'accepted' : action === 'reject' ? 'rejected' : 'pending'
+          if (body.scope === 'bot') {
+            if (typeof body.bot_id !== 'string' || body.bot_id === '') {
+              sendJson(res, 400, { error: 'bot_id is required when scope=bot' })
+              return
+            }
+            sendJson(res, 200, { memory: await store.reviewBot(body.bot_id, atomId, review) })
+            return
+          }
+          sendJson(res, 200, { memory: await store.reviewRoom(roomId, atomId, review) })
+          return
+        }
         if (parts[2] === 'memory' && req.method === 'POST') {
           const body = await readJson(req)
           const atom = createAtom({

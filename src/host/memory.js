@@ -109,7 +109,7 @@ export function recallAtoms(query, atoms, limit = 6) {
   if (queryTokens.size === 0) return []
   const scored = []
   for (const atom of Array.isArray(atoms) ? atoms : []) {
-    if (atom.review === 'rejected') continue
+    if (atom.review !== 'accepted') continue
     const tokens = new Set(tokenize(`${atom.key} ${atom.text}`))
     let overlap = 0
     for (const token of queryTokens) if (tokens.has(token)) overlap += 1

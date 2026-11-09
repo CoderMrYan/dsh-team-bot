@@ -241,6 +241,28 @@ export function createTools(store, runtime) {
     }),
 
     defineTool({
+      name: 'team_memory_review',
+      description: 'Accept, reject, or re-open one shared or private memory atom.',
+      parameters: {
+        room_id: { type: 'string', required: true, description: 'Room id.' },
+        atom_id: { type: 'string', required: true, description: 'Memory atom id.' },
+        action: { type: 'string', required: true, enum: ['accept', 'reject', 'pending'], description: 'Review decision.' },
+        scope: { type: 'string', enum: ['room', 'bot'], description: 'room (shared) or bot (private); defaults to room.' },
+        bot_id: { type: 'string', description: 'Required when scope=bot.' },
+      },
+      output: jsonOutput(),
+      async execute(args) {
+        await store.init()
+        const review = args.action === 'accept' ? 'accepted' : args.action === 'reject' ? 'rejected' : 'pending'
+        if (args.scope === 'bot') {
+          if (typeof args.bot_id !== 'string' || args.bot_id === '') throw new Error('bot_id is required when scope=bot')
+          return { memory: await store.reviewBot(args.bot_id, args.atom_id, review) }
+        }
+        return { memory: await store.reviewRoom(args.room_id, args.atom_id, review) }
+      },
+    }),
+
+    defineTool({
       name: 'team_dm_ask',
       description: 'Send a private message to one bot and run it as a real Session turn. Returns the reply.',
       parameters: {

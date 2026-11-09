@@ -2,7 +2,7 @@
 
 Native multi-agent group chat for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness).
 
-> Status: **P0–P3 + DM/chief desk** — room store, routing, tools, real-Session runtime, Web panel, memory MVP, private chats and a chief desk. The client half and memory drawer mount after the next Harness restart.
+> Status: **P0–P3.6** — room store, routing, tools, real-Session runtime, Web panel, memory with review queue, private chats and chief desk. Packaging/CI are ready; the client half and memory drawer mount after the next Harness restart.
 
 ## Why
 
@@ -48,6 +48,7 @@ Tools:
 | `team_memory_remember` | add/supersede a shared or private fact |
 | `team_memory_forget` | remove one atom by id |
 | `team_memory_persona` | add an L3 standing preference to a bot |
+| `team_memory_review` | accept / reject / re-open one atom |
 | `team_dm_ask` | run one private chat turn with a bot |
 | `team_dm_history` | read a private conversation |
 | `team_dm_list` | list private conversations |
@@ -69,8 +70,9 @@ Bot profiles persist their `sessionId`, so the next room message continues the s
 - **L2** — an extractive summary over the last 8 messages, refreshed after every `ask`.
 - **L3** — per-bot standing preferences (`team_memory_persona`), capped at 12.
 - **Capture** — a human message containing 记住 / 以后 / 决定 / 规则是 / 不要 / 必须 / 约定 becomes an atom: 记住 is accepted, the rest stay pending for review.
-- **Recall** — CJK bigrams + ASCII words, token overlap plus an importance prior; top 4 shared and top 4 private atoms are injected into the bot prompt with the summary.
-- **Write paths** — model tools (`team_memory_*`) and the panel API (`POST`/`DELETE /rooms/:id/memory`).
+- **Recall** — CJK bigrams + ASCII words, token overlap plus an importance prior; top 4 shared and top 4 private atoms are injected into the bot prompt with the summary. Only **accepted** atoms are recalled.
+- **Review** — auto-captured atoms that are not an explicit 记住 stay `pending`; `team_memory_review` and the panel drawer accept, reject or re-open them. Rejected atoms stay in the document as tombstones but never enter a prompt.
+- **Write paths** — model tools (`team_memory_*`), the panel drawer, and `POST` / `DELETE /rooms/:id/memory` plus `POST /rooms/:id/memory/review`.
 - **Limit** — this is deterministic extraction, not an LLM summarizer; the panel memory drawer and LLM extraction are P3.5.
 
 ### Private chats and chief desk (P3.5)
@@ -144,8 +146,9 @@ The repo is a DSH bundle. Install the directory with `plugin_manager install_bun
 - [x] P2 Web panel: room list, timeline, composer, member chips, room creation (client half mounts after one Harness restart)
 - [x] P3 memory MVP: L1 atoms, L2 extractive summary, L3 persona, BM25-lite recall, explicit capture, tools and API
 - [x] P3.5 private chats and chief desk: per-bot DM timeline, DM runtime, chief role note, `/dms` API
-- [ ] P3.6 memory polish: LLM extraction, review queue UI, memory drawer in the panel
-- [ ] P4 schedules, task dispatch, usage, packaging, CI, publish
+- [x] P3.6 memory review queue and panel drawer: pending atoms stay out of prompts, accept/reject, add/delete, summary
+- [x] P4 packaging and CI: npm metadata, peer deps, CHANGELOG, GitHub Actions
+- [ ] P5 publish: push to GitHub and `npm publish` (blocked on SSH/npm auth)
 
 ## Design references
 

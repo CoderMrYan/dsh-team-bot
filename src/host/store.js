@@ -354,6 +354,28 @@ export class TeamStore {
     return await this.saveMemory('bot', botId, memory)
   }
 
+  /** Accept, reject or re-open one shared atom. */
+  async reviewRoom(roomId, atomId, review) {
+    return await this.reviewMemory('room', roomId, atomId, review)
+  }
+
+  /** Accept, reject or re-open one private atom. */
+  async reviewBot(botId, atomId, review) {
+    return await this.reviewMemory('bot', botId, atomId, review)
+  }
+
+  /** @returns {Promise<object>} the updated memory document. */
+  async reviewMemory(scope, id, atomId, review) {
+    if (review !== 'accepted' && review !== 'rejected' && review !== 'pending') {
+      throw new Error(`invalid review state: ${review}`)
+    }
+    const memory = scope === 'bot' ? await this.botMemory(id) : await this.roomMemory(id)
+    const atom = memory.atoms.find((item) => item.id === atomId)
+    if (atom === undefined) throw new Error(`unknown memory atom: ${atomId}`)
+    atom.review = review
+    return await this.saveMemory(scope, id, memory)
+  }
+
   /** Replace the shared extractive summary. */
   async setRoomSummary(roomId, summary) {
     const memory = await this.roomMemory(roomId)

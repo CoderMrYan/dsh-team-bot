@@ -70,6 +70,31 @@ test('summary keeps the latest messages and formatMemory injects it', () => {
   assert.match(text, /回答简洁/)
 })
 
+test('pending and rejected atoms are not recalled until accepted', () => {
+  const pending = createAtom({ text: '以后默认用英文', key: 'lang', review: 'pending' })
+  assert.equal(recallAtoms('英文', [pending]).length, 0)
+  const accepted = createAtom({ text: '以后默认用英文', key: 'lang', review: 'accepted' })
+  assert.equal(recallAtoms('英文', [accepted]).length, 1)
+  assert.equal(recallAtoms('英文', [{ ...accepted, review: 'rejected' }]).length, 0)
+})
+
+test('store review changes an atom state and validates it', async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'dsh-team-bot-review-'))
+  try {
+    const store = new TeamStore(dir)
+    await store.init()
+    const bot = await store.createBot({ name: 'alice', role: 'researcher' })
+    const room = await store.createRoom({ name: 'general', members: [bot.id] })
+    const result = await store.rememberRoom(room.id, createAtom({ text: '周报周一发', key: 'weekly' }))
+    const atomId = result.memory.atoms[0].id
+    const rejected = await store.reviewRoom(room.id, atomId, 'rejected')
+    assert.equal(rejected.atoms[0].review, 'rejected')
+    await assert.rejects(() => store.reviewRoom(room.id, atomId, 'bogus'), /invalid review state/)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
 test('store persists shared and private memory across a reload', async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), 'dsh-team-bot-memory-'))
   try {

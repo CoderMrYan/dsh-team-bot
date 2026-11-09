@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.0 — 2026-11-09
+
+### Added
+
+- **Memory review queue**: auto-captured `pending` atoms no longer enter prompts until accepted; `team_memory_review` and `POST /rooms/:id/memory/review` accept, reject or re-open an atom.
+- **Panel memory drawer**: summary, atom list with review state, accept/reject/delete, and an inline "remember" input.
+- **Packaging**: npm metadata, peer dependencies, CHANGELOG, and a GitHub Actions CI workflow.
+- Two more memory checks (pending/rejected recall and review transitions).
+
 ## 0.4.0 — 2026-11-09
 
 ### Added

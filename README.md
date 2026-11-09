@@ -4,7 +4,7 @@ Native multi-agent group chat for [DeepSeek Harness](https://github.com/deepseek
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-> Status: **0.7.1** — shared rooms, real-Session runtime, memory with review queue, private chats/chief desk, a left-sidebar Web panel, and one-sentence team composition with avatars. Install from GitHub; npm publish is optional and not done.
+> Status: **0.8.0** — shared rooms, real-Session runtime, memory with review queue, private chats/chief desk, a left-sidebar Web panel, and one-sentence team composition with avatars. Install from GitHub; npm publish is optional and not done.
 
 ## Why
 
@@ -109,9 +109,9 @@ Bot profiles persist their `sessionId`, so the next room message continues the s
 
 ### Web panel
 
-Click **团队群组** in the left sidebar, or open **Settings → 团队群组**. The page lists rooms, shows member chips and the timeline, sends through the same runtime as `team_room_ask`, creates rooms with bot checkboxes, and has a memory drawer with accept/reject.
+Click **团队群组** in the left sidebar, or open **Settings → 团队群组**. Rooms are grouped under their team and can be collapsed; the page shows member chips, the timeline with bot avatars, a composer, room creation, and a memory drawer with accept/reject. **管理** edits a room's members and chief, so the same bot can lead several rooms.
 
-Routes under `/dsh-team-bot/api`: `health`, `state`, `client`, `rooms` (POST), `rooms/:id/messages`, `rooms/:id/ask`, `rooms/:id/memory`, `rooms/:id/memory/review`, `dms`.
+Routes under `/dsh-team-bot/api`: `health`, `state`, `client`, `templates`, `compose`, `rooms` (POST), `rooms/:id` (PATCH), `rooms/:id/messages`, `rooms/:id/ask`, `rooms/:id/memory`, `rooms/:id/memory/review`, `dms`.
 
 A package that gains `dsh.client` after the Host already booted needs one **Harness restart** for the client module graph to include it; after that, enabling/disabling the plugin row is enough.
 
@@ -187,6 +187,7 @@ The repo is a DSH bundle. Install the directory with `plugin_manager install_bun
 - [x] P4 packaging and CI: npm metadata, peer deps, CHANGELOG, GitHub Actions
 - [x] P5 GitHub release path: SSH push done; `dsh plugin add github:CoderMrYan/dsh-team-bot` verified
 - [x] P6 one-sentence teams: archetypes, sub-rooms, chief grafting, deterministic avatars, panel AI 建队
+- [x] P7 UX: team-grouped room list, manage members/chief, timeline avatars, auto-scroll, more avatar variants
 - [ ] npm publish (optional, deferred)
 
 ## Design references

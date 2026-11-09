@@ -6,7 +6,7 @@
  * the same name still look related.
  */
 
-const HUES = [210, 260, 160, 20, 340, 45, 190, 300]
+const HUES = [210, 260, 160, 20, 340, 45, 190, 300, 120, 280, 0, 75]
 
 /** @returns {number} 32-bit FNV-1a hash. */
 export function hashSeed(seed) {
@@ -28,7 +28,7 @@ export function createAvatar(seed, kind = 'bot') {
   const hash = hashSeed(`${kind}:${seed}`)
   return {
     hue: HUES[hash % HUES.length],
-    variant: Math.floor(hash / HUES.length) % 5,
+    variant: Math.floor(hash / HUES.length) % 7,
   }
 }
 

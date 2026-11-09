@@ -71,10 +71,12 @@ export class TeamStore {
     }
     for (const bot of Object.values(this.state.bots)) {
       bot.teamId = String(bot.teamId ?? '')
+      bot.teamName = String(bot.teamName ?? '')
       if (bot.avatar === undefined) bot.avatar = createAvatar(bot.name, 'bot')
     }
     for (const room of Object.values(this.state.rooms)) {
       room.teamId = String(room.teamId ?? '')
+      room.teamName = String(room.teamName ?? '')
       if (room.avatar === undefined) room.avatar = createAvatar(room.name, 'room')
     }
     this.loaded = true
@@ -139,6 +141,7 @@ export class TeamStore {
       model: String(input.model ?? '').trim(),
       workspace: String(input.workspace ?? '').trim(),
       teamId: String(input.teamId ?? ''),
+      teamName: String(input.teamName ?? ''),
       hidden: input.hidden === true,
       avatar: input.avatar ?? createAvatar(name, 'bot'),
       sessionId: '',
@@ -185,6 +188,7 @@ export class TeamStore {
       policy: normalizePolicy(input.policy ?? {}),
       note: '',
       teamId: String(input.teamId ?? ''),
+      teamName: String(input.teamName ?? ''),
       avatar: input.avatar ?? createAvatar(name, 'room'),
       createdAt: new Date().toISOString(),
     }

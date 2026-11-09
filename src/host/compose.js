@@ -67,6 +67,7 @@ export async function composeTeam(store, input = {}, runtime) {
       role: String(spec.role ?? name),
       persona: String(spec.persona ?? ''),
       teamId,
+      teamName,
     })
     bots.push(bot)
     byRole.set(name, bot)
@@ -81,6 +82,7 @@ export async function composeTeam(store, input = {}, runtime) {
     members: bots.map((bot) => bot.id),
     chiefId: chief.id,
     teamId,
+    teamName,
     policy: { replyMode: 'auto', maxSpeakers: 3 },
   }))
 
@@ -97,6 +99,7 @@ export async function composeTeam(store, input = {}, runtime) {
       members,
       chiefId,
       teamId,
+      teamName,
       policy: { replyMode: 'auto', maxSpeakers: 2 },
     }))
   }

@@ -102,6 +102,15 @@ export function registerRoutes(ctx, store, runtime) {
           })
           return
         }
+        if (parts[0] === 'rooms' && parts[1] !== undefined && parts[2] === undefined && req.method === 'PATCH') {
+          const body = await readJson(req)
+          const room = await store.updateRoom(parts[1], {
+            ...(Array.isArray(body.members) ? { members: body.members.map(String) } : {}),
+            ...(typeof body.chief_id === 'string' ? { chiefId: body.chief_id } : {}),
+          })
+          sendJson(res, 200, room)
+          return
+        }
         if (parts[0] === 'rooms' && parts.length === 1 && req.method === 'POST') {
           const body = await readJson(req)
           const room = await store.createRoom({

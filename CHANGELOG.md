@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.8.0 — 2026-11-09
+
+### Added
+
+- **Team-grouped room list**: teams collapse under a header (main room + subgroups), with counts and the team avatar.
+- **Manage panel**: edit a room's members and chief, including grafting the same chief onto several rooms (`PATCH /rooms/:id`).
+- **Timeline polish**: bot avatars beside messages, auto-scroll to the newest message, and the room name/team in the page header.
+- More avatar variety: 12 hues and 7 face variants (ears, glasses, halo, initials).
+
 ## 0.7.1 — 2026-11-09
 
 ### Added

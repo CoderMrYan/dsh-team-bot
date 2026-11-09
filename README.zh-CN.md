@@ -4,7 +4,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-> 状态：**0.7.1** — 共享房间、真实 Session 运行时、带审核队列的记忆、私聊/总管台、左侧栏 Web 面板，以及带头像的一句话建队。从 GitHub 安装；npm 发布是可选项，暂未发布。
+> 状态：**0.8.0** — 共享房间、真实 Session 运行时、带审核队列的记忆、私聊/总管台、左侧栏 Web 面板，以及带头像的一句话建队。从 GitHub 安装；npm 发布是可选项，暂未发布。
 
 ## 为什么做这个
 
@@ -109,9 +109,9 @@ Bot 画像会持久化 `sessionId`，所以下一条房间消息会继续同一�
 
 ### Web 面板
 
-点击左侧栏 **团队群组**，或打开 **设置 → 团队群组**。页面包含房间列表、成员 chips、时间线、输入框、建房表单，以及支持接受/拒绝的记忆抽屉。
+点击左侧栏 **团队群组**，或打开 **设置 → 团队群组**。房间按团队分组，可折叠；页面包含成员 chips、带 Bot 头像的时间线、输入框、建房表单，以及支持接受/拒绝的记忆抽屉。**管理** 可以改房间成员和总管，所以同一个 Bot 可以带多个群。
 
-面板使用的路由：`health`、`state`、`client`、`rooms`（POST）、`rooms/:id/messages`、`rooms/:id/ask`、`rooms/:id/memory`、`rooms/:id/memory/review`、`dms`。
+面板使用的路由：`health`、`state`、`client`、`templates`、`compose`、`rooms`（POST）、`rooms/:id`（PATCH）、`rooms/:id/messages`、`rooms/:id/ask`、`rooms/:id/memory`、`rooms/:id/memory/review`、`dms`。
 
 如果包是在 Host 启动后才新增 `dsh.client`，客户端模块图需要一次 **Harness 重启** 才会收录；之后启用/禁用插件行即可。
 
@@ -189,6 +189,7 @@ node --check src/host/index.js
 - [x] P4 打包与 CI：npm 元数据、peer deps、CHANGELOG、GitHub Actions
 - [x] P5 GitHub 发布路径：SSH 推送完成；`dsh plugin add github:CoderMrYan/dsh-team-bot` 已验证
 - [x] P6 一句话建队：团队模板、分组、总管嫁接、确定性头像、面板 AI 建队
+- [x] P7 UX：房间按团队分组、成员/总管管理、时间线头像、自动滚动、更多头像样式
 - [ ] npm publish（可选，暂缓）
 
 ## 设计参考

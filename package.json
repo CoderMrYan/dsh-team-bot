@@ -1,6 +1,6 @@
 {
   "name": "dsh-team-bot",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "type": "module",
   "description": "Native multi-agent group chat for DeepSeek Harness: shared rooms, private desks, group and per-bot memory.",
   "license": "MIT",
@@ -61,6 +61,7 @@
     "locale/*.json",
     "icon.svg",
     "README.md",
+    "README.zh-CN.md",
     "CHANGELOG.md",
     "LICENSE"
   ],

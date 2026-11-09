@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.6.1 — 2026-11-09
+
+### Added
+
+- Chinese README (`README.zh-CN.md`), linked from the English README and included in the package.
+- GitHub install path verified: `npm install github:CoderMrYan/dsh-team-bot` → `added 1 package`.
+
+### Changed
+
+- Install docs now recommend GitHub instead of npm; npm publish is explicitly optional/deferred.
+
 ## 0.6.0 — 2026-11-09
 
 ### Added

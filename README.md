@@ -2,7 +2,9 @@
 
 Native multi-agent group chat for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness).
 
-> Status: **0.6.0** — shared rooms, real-Session runtime, memory with review queue, private chats/chief desk, and a Web panel reachable from the left sidebar. Packaging, CI, and GitHub push are done; npm publish is the remaining external step.
+[English](README.md) | [简体中文](README.zh-CN.md)
+
+> Status: **0.6.1** — shared rooms, real-Session runtime, memory with review queue, private chats/chief desk, and a Web panel reachable from the left sidebar. Install from GitHub; npm publish is optional and not done.
 
 ## Why
 
@@ -115,11 +117,15 @@ Room policy:
 
 ## Install
 
-```bash
-# from npm (once published)
-dsh plugin --profile web add dsh-team-bot
+From GitHub (recommended while npm publish is deferred):
 
-# or from a checkout
+```bash
+dsh plugin --profile web add github:CoderMrYan/dsh-team-bot
+```
+
+From a local checkout:
+
+```bash
 dsh plugin --profile web add D:\applications\dsh\dsh-team-bot
 ```
 
@@ -127,10 +133,10 @@ The directory can also be installed through the Plugins page (`plugin_manager in
 
 Verified packaging:
 
+- `npm install github:CoderMrYan/dsh-team-bot` → `added 1 package` (client, host, and locale files all present)
 - `npm pack` → 17 files, ~22 kB (LICENSE / README / CHANGELOG / client / host / locale)
 - `npm install <tarball>` → `added 1 package`
-- `npm publish --dry-run` → passes with public access
-- `npm view dsh-team-bot` → 404, so the name is free
+- `npm publish --dry-run` → passes with public access (not published)
 - Client bundle: registration smoke plus a React SSR render (title and empty state, ~1.5 kB HTML)
 
 ```yaml
@@ -142,7 +148,7 @@ Verified packaging:
 ## Develop
 
 ```bash
-node --test test/store.test.js test/runtime.test.js test/client.test.js
+node --test test/store.test.js test/runtime.test.js test/memory.test.js test/direct.test.js test/client.test.js
 node --check src/host/index.js
 ```
 
@@ -157,7 +163,8 @@ The repo is a DSH bundle. Install the directory with `plugin_manager install_bun
 - [x] P3.5 private chats and chief desk: per-bot DM timeline, DM runtime, chief role note, `/dms` API
 - [x] P3.6 memory review queue and panel drawer: pending atoms stay out of prompts, accept/reject, add/delete, summary
 - [x] P4 packaging and CI: npm metadata, peer deps, CHANGELOG, GitHub Actions
-- [ ] P5 publish: push to GitHub and `npm publish` (blocked on SSH/npm auth)
+- [x] P5 GitHub release path: SSH push done; `dsh plugin add github:CoderMrYan/dsh-team-bot` verified
+- [ ] npm publish (optional, deferred)
 
 ## Design references
 

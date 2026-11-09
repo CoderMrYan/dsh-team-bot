@@ -75,7 +75,7 @@ export function registerRoutes(ctx, store, runtime) {
             brief,
             templateId: typeof body.template === 'string' ? body.template : undefined,
             name: typeof body.name === 'string' ? body.name : undefined,
-          }))
+          }, runtime))
           return
         }
         if (parts[0] === 'client' && req.method === 'GET') {

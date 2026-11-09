@@ -4,7 +4,7 @@ Native multi-agent group chat for [DeepSeek Harness](https://github.com/deepseek
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-> Status: **0.7.0** — shared rooms, real-Session runtime, memory with review queue, private chats/chief desk, a left-sidebar Web panel, and one-sentence team composition with avatars. Install from GitHub; npm publish is optional and not done.
+> Status: **0.7.1** — shared rooms, real-Session runtime, memory with review queue, private chats/chief desk, a left-sidebar Web panel, and one-sentence team composition with avatars. Install from GitHub; npm publish is optional and not done.
 
 ## Why
 
@@ -33,6 +33,8 @@ DSH already has single agents, subagents, and an experimental Agent Teams runtim
 ```
 
 `team_template_list` lists the archetypes; `team_room_update` changes members or grafts the same chief onto another room.
+
+When the brief does not match an archetype, a hidden **团队架构师** Session turns it into a validated JSON role plan; an invalid plan falls back to a generic three-role team, so composition never dead-ends.
 
 Every bot and room gets a deterministic `{hue, variant}` avatar; the panel draws it as an SVG gradient face. The panel's **AI 建队** button calls `POST /compose` with the same templates.
 

@@ -4,7 +4,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-> 状态：**0.7.0** — 共享房间、真实 Session 运行时、带审核队列的记忆、私聊/总管台、左侧栏 Web 面板，以及带头像的一句话建队。从 GitHub 安装；npm 发布是可选项，暂未发布。
+> 状态：**0.7.1** — 共享房间、真实 Session 运行时、带审核队列的记忆、私聊/总管台、左侧栏 Web 面板，以及带头像的一句话建队。从 GitHub 安装；npm 发布是可选项，暂未发布。
 
 ## 为什么做这个
 
@@ -33,6 +33,8 @@ DSH 已经有单 Agent、子 Agent，以及实验性的 Agent Teams 运行时。
 ```
 
 `team_template_list` 列出模板；`team_room_update` 可以改成员，或把同一个总管嫁接到另一个群。
+
+需求没匹配到模板时，隐藏的 **团队架构师** Session 会把它拆成经过校验的 JSON 角色表；生成失败则回退到通用三人组，不会卡死。
 
 每个 Bot 和房间都有确定性的 `{hue, variant}` 头像，面板用 SVG 渐变脸绘制。面板的 **AI 建队** 按钮调用同一个 `POST /compose`。
 

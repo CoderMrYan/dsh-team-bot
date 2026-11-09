@@ -31,7 +31,7 @@ export function createTools(store, runtime) {
     defineTool({
       name: 'team_compose',
       description:
-        'Create a whole team from one sentence: pick a built-in archetype, create all bots, one main room, and sub-rooms each with its own chief.',
+        'Create a whole team from one sentence: pick a built-in archetype, or let the hidden architect design roles for an arbitrary brief; creates all bots, one main room, and sub-rooms each with its own chief.',
       parameters: {
         brief: { type: 'string', required: true, description: 'What the user wants, such as "我要做一个短视频团队".' },
         template: { type: 'string', enum: ['short-video', 'software', 'content', 'research'], description: 'Optional explicit archetype; otherwise matched from the brief.' },
@@ -44,7 +44,7 @@ export function createTools(store, runtime) {
           brief: args.brief,
           templateId: args.template,
           name: args.name,
-        })
+        }, runtime)
       },
     }),
 

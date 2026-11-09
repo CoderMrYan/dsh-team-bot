@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.1 — 2026-11-09
+
+### Added
+
+- Arbitrary briefs now go through a hidden **团队架构师** Session that returns a validated JSON role plan; invalid plans fall back to the generic three-role team.
+- The architect bot is hidden from `team_bot_list` and `/state`.
+
 ## 0.7.0 — 2026-11-09
 
 ### Added

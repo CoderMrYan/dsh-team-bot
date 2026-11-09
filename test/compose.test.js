@@ -55,3 +55,46 @@ test('composeTeam falls back to a small generic team and keeps room names unique
     await rm(dir, { recursive: true, force: true })
   }
 })
+
+test('an arbitrary brief goes through the hidden architect', async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'dsh-team-bot-architect-'))
+  try {
+    const store = new TeamStore(dir)
+    await store.init()
+    const fake = {
+      async ask() {
+        return '```json\n' + JSON.stringify({
+          team: '宠物告别团队',
+          chief: '店长',
+          roles: [
+            { name: '店长', role: '接待与流程', persona: '负责家属沟通和仪式流程。' },
+            { name: '礼仪师', role: '仪式执行', persona: '执行告别仪式，注意情绪与细节。' },
+            { name: '纪念品设计', role: '纪念品', persona: '设计爪印、相册等纪念物。' },
+          ],
+          rooms: [{ name: '接待组', members: ['店长', '礼仪师'], chief: '店长' }],
+        }) + '\n```'
+      },
+    }
+    const result = await composeTeam(store, { brief: '我想做宠物殡葬' }, fake)
+    assert.equal(result.teamName, '宠物告别团队')
+    assert.equal(result.bots.length, 3)
+    assert.equal(result.rooms.length, 2)
+    assert.equal(store.listBots().some((bot) => bot.hidden), false)
+    assert.equal(store.listBots({ includeHidden: true }).some((bot) => bot.hidden), true)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('an invalid architect plan falls back to the generic team', async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'dsh-team-bot-architect-bad-'))
+  try {
+    const store = new TeamStore(dir)
+    await store.init()
+    const result = await composeTeam(store, { brief: '未知领域' }, { async ask() { return 'sorry' } })
+    assert.equal(result.bots.length, 3)
+    assert.equal(result.rooms.length, 1)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})

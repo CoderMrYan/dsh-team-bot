@@ -104,9 +104,10 @@ export class TeamStore {
     return this.writeChain
   }
 
-  /** @returns {object} */
-  listBots() {
-    return Object.values(this.state.bots)
+  /** @returns {object[]} */
+  listBots(options = {}) {
+    const all = Object.values(this.state.bots)
+    return options.includeHidden === true ? all : all.filter((bot) => bot.hidden !== true)
   }
 
   /** @param {string} botId */

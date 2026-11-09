@@ -140,6 +140,32 @@ export function createTools(store, runtime) {
     }),
 
     defineTool({
+      name: 'team_room_delete',
+      description: 'Delete one room and its timeline/memory files.',
+      parameters: {
+        room_id: { type: 'string', required: true, description: 'Room id.' },
+      },
+      output: jsonOutput(),
+      async execute(args) {
+        await store.init()
+        return await store.deleteRoom(args.room_id)
+      },
+    }),
+
+    defineTool({
+      name: 'team_delete',
+      description: 'Delete every room and bot that belongs to one team.',
+      parameters: {
+        team_id: { type: 'string', required: true, description: 'Team id from team_compose.' },
+      },
+      output: jsonOutput(),
+      async execute(args) {
+        await store.init()
+        return await store.deleteTeam(args.team_id)
+      },
+    }),
+
+    defineTool({
       name: 'team_room_list',
       description: 'List every shared room with its members, chief, and reply policy.',
       parameters: {},

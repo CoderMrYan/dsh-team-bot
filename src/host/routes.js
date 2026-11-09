@@ -102,6 +102,14 @@ export function registerRoutes(ctx, store, runtime) {
           })
           return
         }
+        if (parts[0] === 'teams' && parts[1] !== undefined && parts.length === 2 && req.method === 'DELETE') {
+          sendJson(res, 200, await store.deleteTeam(parts[1]))
+          return
+        }
+        if (parts[0] === 'rooms' && parts[1] !== undefined && parts[2] === undefined && req.method === 'DELETE') {
+          sendJson(res, 200, await store.deleteRoom(parts[1]))
+          return
+        }
         if (parts[0] === 'rooms' && parts[1] !== undefined && parts[2] === undefined && req.method === 'PATCH') {
           const body = await readJson(req)
           const room = await store.updateRoom(parts[1], {

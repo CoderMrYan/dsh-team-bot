@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.0 — 2026-11-09
+
+### Added
+
+- **Delete room** (`DELETE /rooms/:id`, `team_room_delete`) and **delete team** (`DELETE /teams/:teamId`, `team_delete`), with confirmation in the manage panel.
+- Deleting also removes the room timeline and room/bot memory files.
+
 ## 0.8.0 — 2026-11-09
 
 ### Added

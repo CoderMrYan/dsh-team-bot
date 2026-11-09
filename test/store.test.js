@@ -83,6 +83,24 @@ test('updateRoom can move members and graft the same chief onto two rooms', asyn
   }
 })
 
+test('deleteRoom and deleteTeam remove their records', async () => {
+  const { store, dir } = await freshStore()
+  try {
+    const a = await store.createBot({ name: 'a', teamId: 'team-x' })
+    const b = await store.createBot({ name: 'b', teamId: 'team-x' })
+    const first = await store.createRoom({ name: 'first', members: [a.id, b.id], teamId: 'team-x' })
+    const second = await store.createRoom({ name: 'second', members: [a.id], teamId: 'team-x' })
+    await store.deleteRoom(second.id)
+    assert.equal(store.listRooms().some((room) => room.id === second.id), false)
+    await store.deleteTeam('team-x')
+    assert.equal(store.listRooms().some((room) => room.id === first.id), false)
+    assert.equal(store.listBots().some((bot) => bot.id === a.id || bot.id === b.id), false)
+    await assert.rejects(() => store.deleteTeam(''), /team id is required/)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
 test('mention routing wins, then admin, then auto', async () => {
   const { store, dir, room, bots } = await freshRoom({ replyMode: 'admin' })
   try {

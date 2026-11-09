@@ -218,6 +218,37 @@ export class TeamStore {
     return room
   }
 
+  /** Delete one room and its timeline/memory files. */
+  async deleteRoom(roomId) {
+    await this.init()
+    this.getRoom(roomId)
+    delete this.state.rooms[roomId]
+    await this.save()
+    await rm(this.messagesPath(roomId), { force: true }).catch(() => undefined)
+    await rm(this.memoryPath('room', roomId), { force: true }).catch(() => undefined)
+    return { roomId }
+  }
+
+  /** Delete every room and bot that belongs to one team. */
+  async deleteTeam(teamId) {
+    await this.init()
+    const id = String(teamId ?? '')
+    if (id === '') throw new Error('team id is required')
+    const roomIds = Object.values(this.state.rooms).filter((room) => room.teamId === id).map((room) => room.id)
+    const botIds = Object.values(this.state.bots).filter((bot) => bot.teamId === id).map((bot) => bot.id)
+    for (const roomId of roomIds) delete this.state.rooms[roomId]
+    for (const botId of botIds) delete this.state.bots[botId]
+    await this.save()
+    for (const roomId of roomIds) {
+      await rm(this.messagesPath(roomId), { force: true }).catch(() => undefined)
+      await rm(this.memoryPath('room', roomId), { force: true }).catch(() => undefined)
+    }
+    for (const botId of botIds) {
+      await rm(this.memoryPath('bot', botId), { force: true }).catch(() => undefined)
+    }
+    return { teamId: id, roomIds, botIds }
+  }
+
   /**
    * Append one message and compute who should answer it.
    * @param {{roomId:string, sender:{type:'human'|'bot', id?:string, name:string}, text:string, mentions?:string[]}} input

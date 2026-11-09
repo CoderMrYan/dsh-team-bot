@@ -50,6 +50,18 @@ export async function askRoom(store, runtime, input, signal) {
     }
   }
   await store.setRoomSummary(room.id, buildSummary(await store.history(room.id, 8)))
+  if (room.teamId !== '') {
+    try {
+      const teamRooms = store.listRooms().filter((item) => item.teamId === room.teamId)
+      const histories = await Promise.all(teamRooms.map((item) => store.history(item.id, 4)))
+      const merged = histories
+        .flat()
+        .sort((left, right) => String(left.ts).localeCompare(String(right.ts)))
+      await store.setTeamSummary(room.teamId, buildSummary(merged.slice(-8)))
+    } catch {
+      // The team may have been deleted while the replies were running.
+    }
+  }
   return { posted: message, routed, replies }
 }
 

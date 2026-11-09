@@ -4,7 +4,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-> 状态：**0.10.0** — 共享房间、真实 Session 运行时、带审核队列的记忆、私聊/总管台、左侧栏 Web 面板、带头像的一句话建队，以及团队级共享记忆。从 GitHub 安装；npm 发布是可选项，暂未发布。
+> 状态：**0.11.0** — 共享房间、真实 Session 运行时、带审核队列的记忆、私聊/总管台、左侧栏 Web 面板、带头像的一句话建队、团队级共享记忆、团队重命名与自动团队摘要。从 GitHub 安装；npm 发布是可选项，暂未发布。
 
 ## 为什么做这个
 
@@ -64,6 +64,7 @@ test/           store、routing、runtime、memory、client-bundle 测试
 | `team_template_list` | 列出内置团队模板 |
 | `team_room_create` | 创建房间，指定成员、总管、回复策略 |
 | `team_room_update` | 修改成员/总管/策略，或把总管嫁接到其他群 |
+| `team_rename` | 重命名团队及其主群 |
 | `team_room_list` | 列出房间 |
 | `team_room_post` | 追加一条消息并返回被路由的 Bot（只写存储） |
 | `team_room_ask` | 追加人类消息，把被路由的 Bot 作为真实 turn 执行，并回写回复 |
@@ -91,7 +92,7 @@ Bot 画像会持久化 `sessionId`，所以下一条房间消息会继续同一�
 ### 记忆
 
 - **L0** — 追加式房间 JSONL 是唯一事实来源。
-- **团队** — 同一个 `teamId` 下的房间共享 `memory/team/<teamId>.json`；团队事实会先于房间事实注入，所以前期组和后期组看到的是同一套团队规范。
+- **团队** — 同一个 `teamId` 下的房间共享 `memory/team/<teamId>.json`；团队事实会先于房间事实注入，所以前期组和后期组看到的是同一套团队规范。团队摘要会在每次 ask 后从团队内所有房间的最近消息重建。
 - **L1** — 原子 `{key, text, importance, review}`。同 `key` 覆盖；近重复（Jaccard ≥ 0.8）跳过；按 importance 上限 40 条。
 - **L2** — 最近 8 条消息的抽取式摘要，每次 `ask` 后刷新。
 - **L3** — 每个 Bot 的常驻偏好（`team_memory_persona`），上限 12 条。
@@ -110,9 +111,9 @@ Bot 画像会持久化 `sessionId`，所以下一条房间消息会继续同一�
 
 ### Web 面板
 
-点击左侧栏 **团队群组**，或打开 **设置 → 团队群组**。房间按团队分组，可折叠，也可用搜索框过滤；页面包含成员 chips、带 Bot 头像的时间线、输入框、带 Bot 搜索的建房表单，以及支持接受/拒绝的记忆抽屉。**管理** 可以改房间成员和总管，也可以删除房间或整个团队（带确认）。
+点击左侧栏 **团队群组**，或打开 **设置 → 团队群组**。房间按团队分组，可折叠，也可用搜索框过滤；页面包含成员 chips、带 Bot 头像的时间线、输入框、带 Bot 搜索的建房表单，以及房间/团队双 tab 的记忆抽屉。**管理** 可以改成员和总管、重命名团队，也可以删除房间或整个团队（带确认）。
 
-面板使用的路由：`health`、`state`、`client`、`templates`、`compose`、`rooms`（POST）、`rooms/:id`（PATCH/DELETE）、`rooms/:id/messages`、`rooms/:id/ask`、`rooms/:id/memory`、`rooms/:id/memory/review`、`teams/:teamId`（DELETE）、`teams/:teamId/memory`、`teams/:teamId/memory/review`、`dms`。
+面板使用的路由：`health`、`state`、`client`、`templates`、`compose`、`rooms`（POST）、`rooms/:id`（PATCH/DELETE）、`rooms/:id/messages`、`rooms/:id/ask`、`rooms/:id/memory`、`rooms/:id/memory/review`、`teams/:teamId`（PATCH/DELETE）、`teams/:teamId/memory`、`teams/:teamId/memory/review`、`dms`。
 
 如果包是在 Host 启动后才新增 `dsh.client`，客户端模块图需要一次 **Harness 重启** 才会收录；之后启用/禁用插件行即可。
 
@@ -194,6 +195,7 @@ node --check src/host/index.js
 - [x] P7 UX：房间按团队分组、成员/总管管理、时间线头像、自动滚动、更多头像样式
 - [x] P8 生命周期：删除房间/团队、确认、时间线与记忆清理
 - [x] P9 团队级记忆：团队内所有房间共享事实，面板双 tab，工具与 API
+- [x] P10 团队身份：重命名、自动团队摘要、点击房间行的焦点框修复
 - [ ] npm publish（可选，暂缓）
 
 ## 设计参考

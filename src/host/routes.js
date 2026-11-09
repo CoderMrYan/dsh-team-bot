@@ -102,6 +102,11 @@ export function registerRoutes(ctx, store, runtime) {
           })
           return
         }
+        if (parts[0] === 'teams' && parts[1] !== undefined && parts.length === 2 && req.method === 'PATCH') {
+          const body = await readJson(req)
+          sendJson(res, 200, await store.renameTeam(parts[1], typeof body.name === 'string' ? body.name : ''))
+          return
+        }
         if (parts[0] === 'teams' && parts[1] !== undefined && parts[2] === 'memory') {
           const teamId = parts[1]
           if (req.method === 'GET') {

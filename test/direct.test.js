@@ -4,7 +4,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { TeamStore } from '../src/host/store.js'
-import { askDirect } from '../src/host/actions.js'
+import { askDirect, askRoom } from '../src/host/actions.js'
 import { buildDirectPrompt } from '../src/host/runtime.js'
 
 /** @returns {Promise<{store: TeamStore, dir: string, bot: object}>} an isolated store with one bot. */
@@ -81,4 +81,21 @@ test('buildDirectPrompt carries persona and private memory', () => {
   assert.match(prompt, /Your private summary/)
   assert.match(prompt, /周报周一上午发/)
   assert.match(prompt, /回答简洁/)
+})
+
+test('askRoom refreshes the team summary across team rooms', async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'dsh-team-bot-team-summary-'))
+  try {
+    const store = new TeamStore(dir)
+    await store.init()
+    const bot = await store.createBot({ name: 'alice', teamId: 'team-s' })
+    const first = await store.createRoom({ name: 'main', members: [bot.id], teamId: 'team-s', teamName: '团队S' })
+    await store.createRoom({ name: 'sub', members: [bot.id], teamId: 'team-s', teamName: '团队S' })
+    const runtime = { async ask() { return '团队回复内容' } }
+    await askRoom(store, runtime, { roomId: first.id, text: '确认团队规范', mentions: [bot.id] })
+    const team = await store.teamMemory('team-s')
+    assert.match(team.summary, /团队回复内容/)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
 })

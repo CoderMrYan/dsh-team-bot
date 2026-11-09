@@ -4,7 +4,7 @@ Native multi-agent group chat for [DeepSeek Harness](https://github.com/deepseek
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-> Status: **0.10.0** — shared rooms, real-Session runtime, memory with review queue, private chats/chief desk, a left-sidebar Web panel, one-sentence team composition with avatars, and team-wide memory. Install from GitHub; npm publish is optional and not done.
+> Status: **0.11.0** — shared rooms, real-Session runtime, memory with review queue, private chats/chief desk, a left-sidebar Web panel, one-sentence team composition with avatars, team-wide memory, rename, and auto team summaries. Install from GitHub; npm publish is optional and not done.
 
 ## Why
 
@@ -64,6 +64,7 @@ Tools:
 | `team_template_list` | list the built-in team archetypes |
 | `team_room_create` | create a room with members, chief, reply policy |
 | `team_room_update` | change members/chief/policy, or graft a chief onto another room |
+| `team_rename` | rename a team and its main room |
 | `team_room_list` | list rooms |
 | `team_room_post` | append a message and return the routed bots (store only) |
 | `team_room_ask` | append a human message, run the routed bots as real turns, append their replies |
@@ -91,7 +92,7 @@ Bot profiles persist their `sessionId`, so the next room message continues the s
 ### Memory (P3 MVP)
 
 - **L0** — the append-only room JSONL stays the source of truth.
-- **Team** — rooms with the same `teamId` share `memory/team/<teamId>.json`; team facts are injected before room facts, so 前期组 and 后期组 see the same team standard.
+- **Team** — rooms with the same `teamId` share `memory/team/<teamId>.json`; team facts are injected before room facts, so 前期组 and 后期组 see the same team standard. The team summary is rebuilt from the latest messages across all team rooms after each ask.
 - **L1** — atoms `{key, text, importance, review}`. Same `key` supersedes, a near-duplicate (Jaccard ≥ 0.8) is skipped, and the list is capped at 40 by importance.
 - **L2** — an extractive summary over the last 8 messages, refreshed after every `ask`.
 - **L3** — per-bot standing preferences (`team_memory_persona`), capped at 12.
@@ -110,9 +111,9 @@ Bot profiles persist their `sessionId`, so the next room message continues the s
 
 ### Web panel
 
-Click **团队群组** in the left sidebar, or open **Settings → 团队群组**. Rooms are grouped under their team and can be collapsed or filtered with the search box; the page shows member chips, the timeline with bot avatars, a composer, room creation with Bot search, and a memory drawer with accept/reject. **管理** edits a room's members and chief, and can delete the room or the whole team (with confirmation).
+Click **团队群组** in the left sidebar, or open **Settings → 团队群组**. Rooms are grouped under their team and can be collapsed or filtered with the search box; the page shows member chips, the timeline with bot avatars, a composer, room creation with Bot search, and a memory drawer with room/team tabs. **管理** edits members and chief, renames the team, and can delete the room or the whole team (with confirmation).
 
-Routes under `/dsh-team-bot/api`: `health`, `state`, `client`, `templates`, `compose`, `rooms` (POST), `rooms/:id` (PATCH/DELETE), `rooms/:id/messages`, `rooms/:id/ask`, `rooms/:id/memory`, `rooms/:id/memory/review`, `teams/:teamId` (DELETE), `teams/:teamId/memory`, `teams/:teamId/memory/review`, `dms`.
+Routes under `/dsh-team-bot/api`: `health`, `state`, `client`, `templates`, `compose`, `rooms` (POST), `rooms/:id` (PATCH/DELETE), `rooms/:id/messages`, `rooms/:id/ask`, `rooms/:id/memory`, `rooms/:id/memory/review`, `teams/:teamId` (PATCH/DELETE), `teams/:teamId/memory`, `teams/:teamId/memory/review`, `dms`.
 
 A package that gains `dsh.client` after the Host already booted needs one **Harness restart** for the client module graph to include it; after that, enabling/disabling the plugin row is enough.
 
@@ -192,6 +193,7 @@ The repo is a DSH bundle. Install the directory with `plugin_manager install_bun
 - [x] P7 UX: team-grouped room list, manage members/chief, timeline avatars, auto-scroll, more avatar variants
 - [x] P8 lifecycle: delete room/team, confirmation, timeline and memory cleanup
 - [x] P9 team-wide memory: shared atoms across every room in a team, panel tabs, tools and API
+- [x] P10 team identity: rename, auto team summary, and a focus-outline fix for clicked room rows
 - [ ] npm publish (optional, deferred)
 
 ## Design references

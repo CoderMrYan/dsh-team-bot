@@ -140,6 +140,20 @@ export function createTools(store, runtime) {
     }),
 
     defineTool({
+      name: 'team_rename',
+      description: 'Rename a team and its main room. Sub-rooms keep their own names.',
+      parameters: {
+        team_id: { type: 'string', required: true, description: 'Team id from team_compose.' },
+        name: { type: 'string', required: true, description: 'New team name.' },
+      },
+      output: jsonOutput(),
+      async execute(args) {
+        await store.init()
+        return await store.renameTeam(args.team_id, args.name)
+      },
+    }),
+
+    defineTool({
       name: 'team_room_delete',
       description: 'Delete one room and its timeline/memory files.',
       parameters: {

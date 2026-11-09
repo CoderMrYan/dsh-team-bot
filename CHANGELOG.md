@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.11.0 — 2026-11-09
+
+### Fixed
+
+- Clicked room/header buttons no longer keep a browser focus rectangle; the selected room now uses an inset accent bar instead.
+
+### Added
+
+- **Team rename** (`team_rename`, `PATCH /teams/:teamId`): renames the team, its main room, and every member's `teamName`; sub-rooms keep their names.
+- **Team summary**: after an ask, the team summary is rebuilt from the latest messages across every room in the team and shown in the panel's team-memory tab.
+
 ## 0.10.0 — 2026-11-09
 
 ### Added

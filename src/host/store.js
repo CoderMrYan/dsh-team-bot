@@ -229,6 +229,29 @@ export class TeamStore {
     return { roomId }
   }
 
+  /** Rename a team and its main room. */
+  async renameTeam(teamId, name) {
+    await this.init()
+    this.assertTeam(teamId)
+    const next = String(name ?? '').trim()
+    if (next === '') throw new Error('team name is required')
+    const rooms = Object.values(this.state.rooms).filter((room) => room.teamId === String(teamId))
+    const oldName = rooms[0]?.teamName || rooms[0]?.name || ''
+    const main = rooms.find((room) => room.name === oldName)
+    const conflict = Object.values(this.state.rooms).some((room) => room.id !== main?.id
+      && room.name.toLowerCase() === next.toLowerCase())
+    if (conflict) throw new Error(`room name already used: ${next}`)
+    for (const room of rooms) {
+      room.teamName = next
+      if (room.name === oldName) room.name = next
+    }
+    for (const bot of Object.values(this.state.bots)) {
+      if (bot.teamId === String(teamId)) bot.teamName = next
+    }
+    await this.save()
+    return { teamId: String(teamId), name: next, roomIds: rooms.map((room) => room.id) }
+  }
+
   /** Delete every room and bot that belongs to one team. */
   async deleteTeam(teamId) {
     await this.init()

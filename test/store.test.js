@@ -101,6 +101,25 @@ test('deleteRoom and deleteTeam remove their records', async () => {
   }
 })
 
+test('renameTeam updates the main room, teamName, and every member', async () => {
+  const { store, dir } = await freshStore()
+  try {
+    const a = await store.createBot({ name: 'a', teamId: 'team-r' })
+    const b = await store.createBot({ name: 'b', teamId: 'team-r' })
+    const main = await store.createRoom({ name: '旧团队', members: [a.id, b.id], teamId: 'team-r', teamName: '旧团队' })
+    const sub = await store.createRoom({ name: '子组', members: [a.id], teamId: 'team-r', teamName: '旧团队' })
+    await store.renameTeam('team-r', '新团队')
+    const rooms = store.listRooms()
+    assert.equal(rooms.find((room) => room.id === main.id).name, '新团队')
+    assert.equal(rooms.find((room) => room.id === sub.id).name, '子组')
+    assert.equal(rooms.find((room) => room.id === sub.id).teamName, '新团队')
+    assert.equal(store.getBot(a.id).teamName, '新团队')
+    await assert.rejects(() => store.renameTeam('team-r', '子组'), /already used/)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
 test('mention routing wins, then admin, then auto', async () => {
   const { store, dir, room, bots } = await freshRoom({ replyMode: 'admin' })
   try {

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.12.4 — 2026-11-09
+
+### Fixed
+
+- The @ member candidate list is now a full-width row inside the composer instead of an absolutely positioned popover, so it is visible above the input on mobile and cannot be clipped by the chat container.
+
 ## 0.12.3 — 2026-11-09
 
 ### Fixed

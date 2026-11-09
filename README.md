@@ -4,7 +4,7 @@ Native multi-agent group chat for [DeepSeek Harness](https://github.com/deepseek
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-> Status: **0.12.3** — shared rooms, real-Session runtime, memory with review queue, private chats/chief desk, a left-sidebar Web panel, one-sentence team composition with avatars, team-wide memory, rename, auto team summaries, and a mobile layout. Install from GitHub; npm publish is optional and not done.
+> Status: **0.12.4** — shared rooms, real-Session runtime, memory with review queue, private chats/chief desk, a left-sidebar Web panel, one-sentence team composition with avatars, team-wide memory, rename, auto team summaries, and a mobile layout. Install from GitHub; npm publish is optional and not done.
 
 ## Why
 

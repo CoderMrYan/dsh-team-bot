@@ -139,11 +139,12 @@ Work the task now. Use your tools to inspect files, run commands, search the web
 }
 
 /** @returns {string} the model-facing prompt for the main orchestrator. */
-export function buildMainPrompt(mainBot, bots, rooms, tasks, presence, command = '') {
+export function buildMainPrompt(mainBot, bots, rooms, tasks, presence, approvals = [], command = '') {
   const botLines = bots.map((bot) => `- ${bot.id} ${bot.name} | ${bot.role} | ${bot.isMain ? 'MAIN' : 'sub-bot'}`).join('\n')
   const roomLines = rooms.map((room) => `- ${room.id} ${room.name} | members: ${room.members.join(', ')} | chief: ${room.chiefId || 'none'}`).join('\n')
   const taskLines = tasks.slice(0, 20).map((task) => `- ${task.id} [${task.status}] ${task.title} | owner: ${task.ownerBotId || 'unassigned'} | ${task.currentStep || 'no step'}`).join('\n')
   const presenceLines = presence.map((row) => `- ${row.botId}: ${row.status}${row.action ? ` · ${row.action}` : ''}`).join('\n')
+  const approvalLines = approvals.map((approval) => `- ${approval.id} | ${approval.kind} | ${approval.summary}`).join('\n')
   return `You are "${mainBot.name}", the MAIN BOT and orchestrator of this DSH team.
 
 You are a real agent with your own Session, not a settings page. Talk to the Lead naturally, decide what needs to happen, and use tools to make it happen. The Lead can ask you to create sub-bots, create groups, assign tasks, inspect progress, unblock work, or summarize the team.
@@ -160,6 +161,9 @@ ${taskLines || '- no tasks yet'}
 Live presence:
 ${presenceLines || '- no presence yet'}
 
+Pending approvals:
+${approvalLines || '- none'}
+
 The Lead's latest command (act on this now):
 ${command || '(none)'}
 
@@ -169,7 +173,7 @@ Operating rules:
 - A sub-bot must report through team_task_report; when you need a status, call team_task_status or read the task.
 - Keep the Lead informed with short progress updates, especially after a command, a handoff, a block, and a completion.
 - Do not claim a sub-bot did work unless the task/activity log shows it.
-- Destructive actions (deleting bots, rooms, files or data) require explicit confirmation from the Lead.
+- Destructive actions (deleting bots, rooms, teams or tasks) create a pending approval. Tell the Lead to approve it in the command center, then call the same tool with its approval_id. Never claim a destructive action succeeded before it is approved and executed.
 - Reply in Chinese unless the Lead writes in another language. Be concise and operational.
 - If you are only chatting, do not invent tool calls.`
 }

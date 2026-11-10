@@ -6,6 +6,7 @@
  */
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { askDirect, askRoom, assignTask, handoffTask } from './actions.js'
+import { approvalGate } from './approvals.js'
 import { createAtom, createPersonaItem } from './memory.js'
 import { composeTeam } from './compose.js'
 import { commandState, ensureMain, notifyMain } from './main.js'
@@ -187,14 +188,20 @@ export function createTools(store, runtime) {
 
     defineTool({
       name: 'team_task_delete',
-      description: 'Delete one task record. Destructive: only call after the Lead explicitly confirms.',
+      description: 'Delete one task record. Destructive: requires an approved approval_id; without one this creates a pending approval.',
       parameters: {
         task_id: { type: 'string', required: true, description: 'Task id.' },
-        confirm: { type: 'boolean', required: true, description: 'Must be true after explicit user confirmation.' },
+        approval_id: { type: 'string', description: 'Approval id returned by a previous call.' },
       },
       output: jsonOutput(),
       async execute(args) {
-        if (args.confirm !== true) throw new Error('explicit confirmation is required')
+        const task = store.getTask(args.task_id)
+        const gate = await approvalGate(store, {
+          kind: 'task.delete',
+          payload: { taskId: task.id },
+          summary: `删除任务「${task.title}」(${task.id})`,
+        }, args.approval_id)
+        if (gate.approved !== true) return gate
         return await store.deleteTask(args.task_id)
       },
     }),
@@ -309,14 +316,20 @@ export function createTools(store, runtime) {
 
     defineTool({
       name: 'team_bot_delete',
-      description: 'Delete one sub-bot profile. The Main Bot cannot be deleted and a bot in a room must be removed from the room first. Destructive: require explicit Lead confirmation.',
+      description: 'Delete one sub-bot profile. The Main Bot cannot be deleted and a bot in a room must be removed from the room first. Destructive: requires an approved approval_id; without one this creates a pending approval and does not delete.',
       parameters: {
         bot_id: { type: 'string', required: true, description: 'Bot id.' },
-        confirm: { type: 'boolean', required: true, description: 'Must be true after explicit user confirmation.' },
+        approval_id: { type: 'string', description: 'Approval id returned by a previous call, after the Lead approved it in the command center.' },
       },
       output: jsonOutput(),
       async execute(args) {
-        if (args.confirm !== true) throw new Error('explicit confirmation is required')
+        const bot = store.getBot(args.bot_id)
+        const gate = await approvalGate(store, {
+          kind: 'bot.delete',
+          payload: { botId: bot.id },
+          summary: `删除子 Bot「${bot.name}」(${bot.id})`,
+        }, args.approval_id)
+        if (gate.approved !== true) return gate
         return await store.deleteBot(args.bot_id)
       },
     }),
@@ -389,30 +402,41 @@ export function createTools(store, runtime) {
 
     defineTool({
       name: 'team_room_delete',
-      description: 'Delete one room and its timeline/memory files. Destructive: require explicit Lead confirmation.',
+      description: 'Delete one room and its timeline/memory files. Destructive: requires an approved approval_id; without one this creates a pending approval.',
       parameters: {
         room_id: { type: 'string', required: true, description: 'Room id.' },
-        confirm: { type: 'boolean', required: true, description: 'Must be true after explicit user confirmation.' },
+        approval_id: { type: 'string', description: 'Approval id returned by a previous call.' },
       },
       output: jsonOutput(),
       async execute(args) {
         await store.init()
-        if (args.confirm !== true) throw new Error('explicit confirmation is required')
+        const room = store.getRoom(args.room_id)
+        const gate = await approvalGate(store, {
+          kind: 'room.delete',
+          payload: { roomId: room.id },
+          summary: `删除房间「${room.name}」(${room.id})`,
+        }, args.approval_id)
+        if (gate.approved !== true) return gate
         return await store.deleteRoom(args.room_id)
       },
     }),
 
     defineTool({
       name: 'team_delete',
-      description: 'Delete every room and bot that belongs to one team. Destructive: require explicit Lead confirmation.',
+      description: 'Delete every room and bot that belongs to one team. Destructive: requires an approved approval_id; without one this creates a pending approval.',
       parameters: {
         team_id: { type: 'string', required: true, description: 'Team id from team_compose.' },
-        confirm: { type: 'boolean', required: true, description: 'Must be true after explicit user confirmation.' },
+        approval_id: { type: 'string', description: 'Approval id returned by a previous call.' },
       },
       output: jsonOutput(),
       async execute(args) {
         await store.init()
-        if (args.confirm !== true) throw new Error('explicit confirmation is required')
+        const gate = await approvalGate(store, {
+          kind: 'team.delete',
+          payload: { teamId: args.team_id },
+          summary: `删除团队 ${args.team_id} 及其所有房间/Bot`,
+        }, args.approval_id)
+        if (gate.approved !== true) return gate
         return await store.deleteTeam(args.team_id)
       },
     }),

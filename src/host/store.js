@@ -14,10 +14,11 @@ import { routeMessage } from './routing.js'
 import { defaultMemory, mergeAtoms, normalizeMemory } from './memory.js'
 import { createAvatar } from './avatars.js'
 
-const STATE_VERSION = 2
+const STATE_VERSION = 3
 const REPLY_MODES = new Set(['mention', 'admin', 'auto'])
 const TASK_STATUSES = new Set(['queued', 'running', 'waiting', 'blocked', 'done', 'failed'])
 const PRESENCE_STATUSES = new Set(['idle', 'thinking', 'tool', 'waiting', 'blocked', 'offline'])
+const APPROVAL_STATUSES = new Set(['pending', 'approved', 'rejected', 'executed'])
 
 /** @returns {string} a short stable-looking identifier. */
 function newId(prefix) {
@@ -51,6 +52,7 @@ function emptyState() {
     tasks: {},
     activities: [],
     presence: {},
+    approvals: {},
     main: { botId: '', roomId: '' },
   }
 }
@@ -79,6 +81,7 @@ export class TeamStore {
         tasks: raw.tasks ?? {},
         activities: Array.isArray(raw.activities) ? raw.activities : [],
         presence: raw.presence ?? {},
+        approvals: raw.approvals ?? {},
         main: {
           botId: String(raw.main?.botId ?? ''),
           roomId: String(raw.main?.roomId ?? ''),
@@ -349,6 +352,84 @@ export class TeamStore {
     task.updatedAt = entry.ts
     if (persist) await this.save()
     return entry
+  }
+
+  /** Create one human-approval request for a destructive action. */
+  async createApproval(input = {}) {
+    await this.init()
+    const approval = {
+      id: newId('approval'),
+      kind: String(input.kind ?? ''),
+      payload: input.payload ?? {},
+      summary: String(input.summary ?? ''),
+      requestedBy: String(input.requestedBy ?? 'main'),
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+      resolvedAt: '',
+      result: null,
+    }
+    this.state.approvals[approval.id] = approval
+    await this.save()
+    return approval
+  }
+
+  /** @returns {object[]} approvals, newest first. */
+  listApprovals(filter = {}) {
+    let approvals = Object.values(this.state.approvals)
+    if (typeof filter.status === 'string' && filter.status !== '') {
+      approvals = approvals.filter((approval) => approval.status === filter.status)
+    }
+    return approvals.sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt)))
+  }
+
+  /** @param {string} approvalId */
+  getApproval(approvalId) {
+    const approval = this.state.approvals[approvalId]
+    if (approval === undefined) throw new Error(`unknown approval: ${approvalId}`)
+    return approval
+  }
+
+  /** Approve or reject one pending request. */
+  async resolveApproval(approvalId, decision) {
+    await this.init()
+    if (!['approved', 'rejected'].includes(decision)) throw new Error(`invalid approval decision: ${decision}`)
+    const approval = this.getApproval(approvalId)
+    if (approval.status !== 'pending') throw new Error(`approval is already ${approval.status}`)
+    approval.status = decision
+    approval.resolvedAt = new Date().toISOString()
+    await this.save()
+    return approval
+  }
+
+  /**
+   * Consume an approved request exactly once. Returns the approval record so the
+   * caller can execute its payload; an already executed request is returned with
+   * `alreadyExecuted: true`.
+   */
+  async consumeApproval(approvalId, kind, payload) {
+    await this.init()
+    const approval = this.getApproval(approvalId)
+    if (approval.status === 'executed') return { ...approval, alreadyExecuted: true }
+    if (approval.status !== 'approved') throw new Error(`approval is not approved: ${approval.status}`)
+    if (approval.kind !== kind) throw new Error(`approval kind mismatch: ${approval.kind} != ${kind}`)
+    if (JSON.stringify(approval.payload) !== JSON.stringify(payload)) {
+      throw new Error('approval payload does not match the requested action')
+    }
+    approval.status = 'executed'
+    approval.resolvedAt = new Date().toISOString()
+    await this.save()
+    return approval
+  }
+
+  /** Record the result of an executed approval. */
+  async finishApproval(approvalId, result) {
+    await this.init()
+    const approval = this.getApproval(approvalId)
+    approval.result = result
+    approval.status = 'executed'
+    approval.resolvedAt = new Date().toISOString()
+    await this.save()
+    return approval
   }
 
   /** Register one artifact path on a task. */

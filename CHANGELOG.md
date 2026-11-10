@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.13.3 — 2026-11-10
+
+### Added
+
+- **Human approval workflow for destructive actions**: `team_bot_delete`, `team_task_delete`, `team_room_delete` and `team_delete` now create a pending approval instead of executing. The command center shows a “待审批” card; approving executes the action exactly once, rejecting cancels it. A model cannot self-approve.
+- **Approval API**: `GET /approvals`, `POST /approvals/:id/approve`, `POST /approvals/:id/reject`; pending approvals are included in `/state` and the Main Bot prompt.
+- **Approval tests** for one-shot execution and rejected requests.
+
+### Fixed
+
+- Approval records are JSON-safe (`result: null`) so tool output validation no longer fails with “invalid output”.
+
 ## 0.13.2 — 2026-11-10
 
 ### Added

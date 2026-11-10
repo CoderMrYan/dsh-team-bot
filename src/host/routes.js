@@ -6,6 +6,7 @@
  * diverge.
  */
 import { askDirect, askRoom, assignTask, handoffTask } from './actions.js'
+import { executeApproval } from './approvals.js'
 import { askMain, commandState, ensureMain } from './main.js'
 import { createAtom } from './memory.js'
 import { composeTeam } from './compose.js'
@@ -66,6 +67,7 @@ export function registerRoutes(ctx, store, runtime) {
             tasks: store.listTasks(),
             presence: store.listPresence(),
             activity: store.listActivity({ limit: 80 }),
+            approvals: store.listApprovals({ status: 'pending' }),
             main,
           })
           return
@@ -83,6 +85,39 @@ export function registerRoutes(ctx, store, runtime) {
           }
           sendJson(res, 200, await askMain(store, runtime, { text }))
           return
+        }
+        if (parts[0] === 'approvals' && parts.length === 1 && req.method === 'GET') {
+          sendJson(res, 200, { approvals: store.listApprovals({ status: url.searchParams.get('status') ?? undefined }) })
+          return
+        }
+        if (parts[0] === 'approvals' && parts[1] !== undefined && parts[2] !== undefined && req.method === 'POST') {
+          if (parts[2] === 'approve') {
+            const approval = await store.resolveApproval(parts[1], 'approved')
+            const result = await executeApproval(store, approval.id)
+            await store.recordActivity({
+              botId: approval.requestedBy,
+              taskId: '',
+              kind: 'approval',
+              label: '已批准',
+              detail: approval.summary,
+              status: 'done',
+            })
+            sendJson(res, 200, result)
+            return
+          }
+          if (parts[2] === 'reject') {
+            const approval = await store.resolveApproval(parts[1], 'rejected')
+            await store.recordActivity({
+              botId: approval.requestedBy,
+              taskId: '',
+              kind: 'approval',
+              label: '已拒绝',
+              detail: approval.summary,
+              status: 'error',
+            })
+            sendJson(res, 200, { rejected: true, approval })
+            return
+          }
         }
         if (parts[0] === 'tasks' && parts.length === 1 && req.method === 'GET') {
           sendJson(res, 200, {

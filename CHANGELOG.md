@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.13.5 — 2026-11-10
+
+### Fixed
+
+- **User messages were invisible**: the human bubble used `--dsw-alias-brand-primary`, which is white in the current DSH theme, so the text was white-on-white. Human bubbles now use `--dsw-alias-state-business-primary`.
+- **Header actions stacked vertically**: the title block forced `flex: 1 1 100%`; desktop now keeps the title and the 房间/刷新 buttons on one row.
+- **Clicking a bot did nothing visible**: bot rows only filtered an activity feed that could be below the fold. Clicking now opens a dedicated bot drawer with status, current tasks, recent activity, edit and delete controls.
+- The right rail was one long roster that pushed the activity feed off-screen. It now has **Bot 状态 / 活动流** tabs and an internally scrolling roster.
+
+### Added
+
+- Bot editing: name, role, persona and workspace via the drawer and `PATCH /bots/:id`.
+- Bot deletion from the drawer (Main Bot protected; room members must be removed first), with confirmation.
+
 ## 0.13.4 — 2026-11-10
 
 ### Fixed

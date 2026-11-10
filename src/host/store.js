@@ -575,6 +575,23 @@ export class TeamStore {
     })
   }
 
+  /** Update editable bot profile fields. */
+  async updateBot(botId, patch = {}) {
+    await this.init()
+    const bot = this.getBot(botId)
+    if (patch.name !== undefined) {
+      const name = String(patch.name).trim()
+      if (name === '') throw new Error('bot name is required')
+      bot.name = name
+    }
+    if (patch.role !== undefined) bot.role = String(patch.role).trim()
+    if (patch.title !== undefined) bot.title = String(patch.title).trim()
+    if (patch.persona !== undefined) bot.persona = String(patch.persona).trim()
+    if (patch.workspace !== undefined) bot.workspace = String(patch.workspace).trim()
+    await this.save()
+    return bot
+  }
+
   /** @returns {object[]} */
   listRooms() {
     return Object.values(this.state.rooms)

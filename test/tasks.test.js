@@ -14,8 +14,7 @@ async function fresh() {
   return { store, dir }
 }
 
-test('main bot is unique and stable', async () => {
-  const { store, dir } = await fresh()
+test('main bot is unique and stable', async () => {  const { store, dir } = await fresh()
   try {
     const first = await store.ensureMainBot({ persona: 'orchestrate' })
     const second = await store.ensureMainBot()
@@ -104,6 +103,26 @@ test('runtime records tool activity and closes the task on turn end', async () =
     latest = store.getTask(task.id)
     assert.equal(latest.status, 'waiting')
     assert.equal(store.listPresence().find((row) => row.botId === bot.id).status, 'idle')
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('bot profile fields can be edited', async () => {
+  const { store, dir } = await fresh()
+  try {
+    const bot = await store.createBot({ name: 'researcher', role: 'old' })
+    const updated = await store.updateBot(bot.id, {
+      name: 'researcher-2',
+      role: 'new role',
+      persona: 'new persona',
+      workspace: 'D:/tmp/work',
+    })
+    assert.equal(updated.name, 'researcher-2')
+    assert.equal(updated.role, 'new role')
+    assert.equal(updated.persona, 'new persona')
+    assert.equal(updated.workspace, 'D:/tmp/work')
+    await assert.rejects(() => store.updateBot(bot.id, { name: '   ' }), /name is required/)
   } finally {
     await rm(dir, { recursive: true, force: true })
   }

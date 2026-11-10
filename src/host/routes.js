@@ -217,6 +217,17 @@ export function registerRoutes(ctx, store, runtime) {
           })
           return
         }
+        if (parts[0] === 'bots' && parts[1] !== undefined && req.method === 'PATCH') {
+          const body = await readJson(req)
+          sendJson(res, 200, await store.updateBot(parts[1], {
+            name: body.name,
+            role: body.role,
+            title: body.title,
+            persona: body.persona,
+            workspace: body.workspace,
+          }))
+          return
+        }
         if (parts[0] === 'bots' && parts[1] !== undefined && req.method === 'DELETE') {
           sendJson(res, 200, await store.deleteBot(parts[1]))
           return

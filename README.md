@@ -4,7 +4,20 @@ Native multi-agent group chat for [DeepSeek Harness](https://github.com/deepseek
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-> Status: **0.12.4** — shared rooms, real-Session runtime, memory with review queue, private chats/chief desk, a left-sidebar Web panel, one-sentence team composition with avatars, team-wide memory, rename, auto team summaries, and a mobile layout. Install from GitHub; npm publish is optional and not done.
+> Status: **0.13.0** — persistent Main Bot command center, durable tasks/steps/artifacts, live per-bot tool activity and presence, shared local workspace, watchdog alerts, plus the existing rooms, memory and mobile UI. Install from GitHub; npm publish is optional and not done.
+
+## Local workspace and safety boundary
+
+This version can use the DSH host machine as an execution node, but **not** as an unrestricted cloud computer:
+
+- Bot Sessions default to `$DSH_HOME/dsh-team-bot/workspace` (configurable with `workspaceRoot`); the team shares files there.
+- Access outside the workspace is not automatically granted; DSH sandboxing and approval policy still apply.
+- Bots do not share your browser login sessions. Logged-in web work needs a separate browser tool or a human handoff.
+- Destructive actions (delete bots/rooms/teams, external sends, production changes) should be confirmed with the Lead first.
+- Tasks stop when the machine sleeps or DSH exits; this is not 24×7 cloud hosting.
+- Do not put SSH keys, tokens or customer data in the workspace. Prompt injection can still try to read or exfiltrate files.
+
+The watchdog detects “no progress” but never bypasses approvals to act on its own.
 
 ## Why
 

@@ -1,7 +1,7 @@
 /**
  * Room actions shared by the model tool and the Web API.
  */
-import { buildDirectPrompt, buildRoomPrompt } from './runtime.js'
+import { buildDirectPrompt, buildRoomPrompt, buildTaskPrompt } from './runtime.js'
 import { buildSummary, captureFromHuman } from './memory.js'
 
 /**
@@ -91,4 +91,67 @@ export async function askDirect(store, runtime, input, signal) {
   })
   await store.setBotSummary(bot.id, buildSummary(await store.directHistory(bot.id, 8)))
   return { posted, reply }
+}
+
+/**
+ * Run one durable task on one bot. The task ledger is updated before and after
+ * the Session turn, and the runtime taps tool/step events while it runs.
+ */
+export async function assignTask(store, runtime, input, signal) {
+  await store.init()
+  const task = store.getTask(input.taskId)
+  const bot = store.getBot(input.botId)
+  const room = task.roomId === '' ? undefined : store.getRoom(task.roomId)
+  await store.updateTask(task.id, {
+    ownerBotId: bot.id,
+    status: 'running',
+    currentStep: '已被主 Bot 派发',
+  })
+  await store.addTaskStep(task.id, {
+    kind: 'handoff',
+    label: `派发给 ${bot.name}`,
+    detail: input.instruction ?? task.brief,
+    status: 'done',
+  })
+  await store.setPresence(bot.id, { status: 'thinking', taskId: task.id, action: '接收任务' })
+  const botMemory = await store.botMemory(bot.id)
+  const roomMemory = room === undefined ? undefined : await store.roomMemory(room.id)
+  const teamMemory = task.teamId === '' ? undefined : await store.teamMemory(task.teamId)
+  let replyText = ''
+  try {
+    const prompt = buildTaskPrompt(bot, task, room, { roomMemory, botMemory, teamMemory, query: task.brief || task.title })
+    replyText = (await runtime.ask(bot, prompt, signal, { taskId: task.id, roomId: task.roomId })).trim()
+    if (replyText !== '' && replyText !== '[PASS]') {
+      if (room !== undefined) {
+        await store.postMessage({
+          roomId: room.id,
+          sender: { type: 'bot', id: bot.id, name: bot.name },
+          text: replyText,
+        })
+      } else {
+        await store.postDirect({
+          botId: bot.id,
+          sender: { type: 'bot', id: bot.id, name: bot.name },
+          text: replyText,
+        })
+      }
+    }
+    const latest = store.getTask(task.id)
+    if (!['done', 'failed', 'blocked'].includes(latest.status)) {
+      await store.updateTask(task.id, { status: 'waiting', currentStep: '本轮结束，等待验收' })
+    }
+    await store.setPresence(bot.id, { status: 'idle', taskId: '', action: '空闲' })
+    return { task: store.getTask(task.id), reply: replyText }
+  } catch (error) {
+    await store.updateTask(task.id, {
+      status: 'failed',
+      currentStep: error instanceof Error ? error.message : String(error),
+    }).catch(() => undefined)
+    await store.setPresence(bot.id, {
+      status: 'blocked',
+      taskId: task.id,
+      action: error instanceof Error ? error.message : String(error),
+    }).catch(() => undefined)
+    throw error
+  }
 }

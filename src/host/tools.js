@@ -5,9 +5,10 @@
  * decisions. P1 adds the real-Session runtime that turns `routed` into replies.
  */
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import { askDirect, askRoom } from './actions.js'
+import { askDirect, askRoom, assignTask } from './actions.js'
 import { createAtom, createPersonaItem } from './memory.js'
 import { composeTeam } from './compose.js'
+import { commandState, ensureMain, notifyMain } from './main.js'
 import { listTemplates } from './templates.js'
 
 const ANY_OBJECT = { type: 'object', additionalProperties: true }
@@ -28,6 +29,180 @@ function jsonOutput(schema = ANY_OBJECT) {
  */
 export function createTools(store, runtime) {
   return [
+    defineTool({
+      name: 'team_main_ensure',
+      description: 'Ensure the persistent Main Bot (the orchestrator agent with its own Session) exists; returns its id and the command-center state.',
+      parameters: {},
+      output: jsonOutput(),
+      async execute() {
+        const main = await ensureMain(store)
+        const state = await commandState(store)
+        return { main, state }
+      },
+    }),
+
+    defineTool({
+      name: 'team_main_status',
+      description: 'Read the command center: Main Bot, bots, rooms, durable tasks, live bot presence and recent activity.',
+      parameters: {},
+      output: jsonOutput(),
+      async execute() {
+        return await commandState(store)
+      },
+    }),
+
+    defineTool({
+      name: 'team_task_create',
+      description: 'Create one durable task owned by the team. Use this before assigning work so progress, blockers and artifacts are visible.',
+      parameters: {
+        title: { type: 'string', required: true, description: 'Short task title.' },
+        brief: { type: 'string', description: 'Detailed brief, acceptance criteria and output path.' },
+        owner_bot_id: { type: 'string', description: 'Optional bot id; empty means unassigned.' },
+        room_id: { type: 'string', description: 'Optional room id for the result.' },
+        team_id: { type: 'string', description: 'Optional team id.' },
+        parent_id: { type: 'string', description: 'Optional parent task id for subtasks.' },
+      },
+      output: jsonOutput(),
+      async execute(args) {
+        return await store.createTask({
+          title: args.title,
+          brief: args.brief,
+          ownerBotId: args.owner_bot_id,
+          roomId: args.room_id,
+          teamId: args.team_id,
+          parentId: args.parent_id,
+          createdBy: 'main',
+        })
+      },
+    }),
+
+    defineTool({
+      name: 'team_task_assign',
+      description: 'Assign a durable task to one bot and run it as a real Session turn. The runtime records tool calls, task steps and presence while it runs.',
+      parameters: {
+        task_id: { type: 'string', required: true, description: 'Task id.' },
+        bot_id: { type: 'string', required: true, description: 'Owner bot id.' },
+        instruction: { type: 'string', description: 'Optional extra instruction for this assignment.' },
+      },
+      output: jsonOutput(),
+      timeoutMs: 600_000,
+      async execute(args, exec) {
+        return await assignTask(store, runtime, {
+          taskId: args.task_id,
+          botId: args.bot_id,
+          instruction: args.instruction,
+        }, exec.signal)
+      },
+    }),
+
+    defineTool({
+      name: 'team_task_update',
+      description: 'Update one task status, progress, owner or current step. Use status done only when the deliverable is actually ready.',
+      parameters: {
+        task_id: { type: 'string', required: true, description: 'Task id.' },
+        status: { type: 'string', enum: ['queued', 'running', 'waiting', 'blocked', 'done', 'failed'], description: 'New status.' },
+        progress: { type: 'integer', description: '0-100.' },
+        owner_bot_id: { type: 'string', description: 'New owner bot id.' },
+        current_step: { type: 'string', description: 'Short current step label.' },
+      },
+      output: jsonOutput(),
+      async execute(args) {
+        return await store.updateTask(args.task_id, {
+          status: args.status,
+          progress: args.progress,
+          ownerBotId: args.owner_bot_id,
+          currentStep: args.current_step,
+        })
+      },
+    }),
+
+    defineTool({
+      name: 'team_task_report',
+      description: 'Report progress for the task you are executing. Call at start, at milestones, when blocked, and when done. This is what makes the bot visible in the command center.',
+      parameters: {
+        task_id: { type: 'string', required: true, description: 'Task id.' },
+        bot_id: { type: 'string', required: true, description: 'Your bot id (the owner).' },
+        status: { type: 'string', required: true, enum: ['running', 'waiting', 'blocked', 'done', 'failed'], description: 'Report status.' },
+        message: { type: 'string', description: 'Human-readable progress or blocker.' },
+        progress: { type: 'integer', description: '0-100; optional.' },
+      },
+      output: jsonOutput(),
+      async execute(args) {
+        const progress = args.status === 'done' ? 100 : args.progress
+        await store.updateTask(args.task_id, {
+          status: args.status,
+          progress,
+          currentStep: args.message,
+        })
+        await store.recordActivity({
+          botId: args.bot_id,
+          taskId: args.task_id,
+          kind: 'report',
+          label: args.status === 'blocked' ? '阻塞上报' : args.status === 'done' ? '任务完成' : '进度上报',
+          detail: args.message,
+          status: args.status === 'blocked' ? 'error' : 'done',
+        })
+        await store.setPresence(args.bot_id, {
+          status: args.status === 'blocked' ? 'blocked' : args.status === 'done' ? 'idle' : 'waiting',
+          taskId: args.status === 'done' ? '' : args.task_id,
+          action: args.message ?? args.status,
+        })
+        const owner = store.getBot(args.bot_id)
+        const task = store.getTask(args.task_id)
+        await notifyMain(store, `[${args.status === 'blocked' ? '阻塞' : args.status === 'done' ? '完成' : '进度'}] ${owner.name} · ${task.title}\n${args.message ?? ''}`)
+        return task
+      },
+    }),
+
+    defineTool({
+      name: 'team_task_artifact',
+      description: 'Register one deliverable file path (inside the shared team workspace) on a task.',
+      parameters: {
+        task_id: { type: 'string', required: true, description: 'Task id.' },
+        path: { type: 'string', required: true, description: 'Absolute path or workspace-relative path.' },
+        name: { type: 'string', description: 'Optional display name.' },
+      },
+      output: jsonOutput(),
+      async execute(args) {
+        return await store.addTaskArtifact(args.task_id, {
+          path: args.path,
+          name: args.name ?? args.path.split(/[\\/]/).pop(),
+        })
+      },
+    }),
+
+    defineTool({
+      name: 'team_task_list',
+      description: 'List durable tasks, optionally filtered by owner, room or status.',
+      parameters: {
+        owner_bot_id: { type: 'string', description: 'Filter by owner bot id.' },
+        room_id: { type: 'string', description: 'Filter by room id.' },
+        status: { type: 'string', description: 'Filter by status.' },
+      },
+      output: jsonOutput(),
+      async execute(args) {
+        return {
+          tasks: store.listTasks({
+            ownerBotId: args.owner_bot_id,
+            roomId: args.room_id,
+            status: args.status,
+          }),
+        }
+      },
+    }),
+
+    defineTool({
+      name: 'team_task_get',
+      description: 'Read one task with its steps, artifacts, owner and current status.',
+      parameters: {
+        task_id: { type: 'string', required: true, description: 'Task id.' },
+      },
+      output: jsonOutput(),
+      async execute(args) {
+        return await store.getTask(args.task_id)
+      },
+    }),
+
     defineTool({
       name: 'team_compose',
       description:

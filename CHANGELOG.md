@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.13.0 — 2026-11-10
+
+### Added
+
+- **Persistent Main Bot**: a real DSH Session with its own persona and a private command-center chat. It can create sub-bots, create rooms, create durable tasks, assign owners, inspect status and summarize work.
+- **Task ledger**: durable `Task` records with owner, status, progress, steps, artifacts, parent task and timestamps.
+- **Live activity**: `BotRuntime` now taps Session events while a turn runs (`tool/call`, `tool/result`, `assistant/message`, `turn/end`) and writes task steps, presence and a global activity feed.
+- **Command center UI**: default Web panel view with Main Bot chat, task board, per-task execution steps, live Bot status and activity stream; the existing room UI is still available.
+- **Progress contract**: delegated bots are prompted to call `team_task_report` at start/milestones/blocked/done; runtime still records tool activity automatically.
+- **Watchdog**: marks tasks with no update for 90 seconds and posts a proactive Main Bot alert without spending model tokens.
+- **Local shared workspace**: all bot Sessions default to a scoped workspace under the plugin data directory. No unrestricted machine access is granted by this change.
+
 ## 0.12.4 — 2026-11-09
 
 ### Fixed

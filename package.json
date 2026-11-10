@@ -1,8 +1,8 @@
 {
   "name": "dsh-team-bot",
-  "version": "0.12.4",
+  "version": "0.13.0",
   "type": "module",
-  "description": "Native multi-agent group chat for DeepSeek Harness: shared rooms, private desks, group and per-bot memory.",
+  "description": "Grok Bot-style multi-agent command center for DeepSeek Harness: a persistent Main Bot, durable tasks, live bot/tool activity, shared workspace and group rooms.",
   "license": "MIT",
   "author": "CoderMrYan",
   "homepage": "https://github.com/CoderMrYan/dsh-team-bot#readme",
@@ -66,7 +66,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "test": "node --test test/store.test.js test/runtime.test.js test/memory.test.js test/direct.test.js test/compose.test.js test/client.test.js",
-    "check": "node --check src/host/index.js && node --check src/host/store.js && node --check src/host/routing.js && node --check src/host/runtime.js && node --check src/host/memory.js && node --check src/host/avatars.js && node --check src/host/templates.js && node --check src/host/architect.js && node --check src/host/compose.js && node --check src/host/tools.js && node --check src/host/actions.js && node --check src/host/routes.js && node --check lib/client.js"
+    "test": "node --test test/store.test.js test/runtime.test.js test/memory.test.js test/direct.test.js test/compose.test.js test/client.test.js test/tasks.test.js test/main.test.js",
+    "check": "node --check src/host/index.js && node --check src/host/store.js && node --check src/host/routing.js && node --check src/host/runtime.js && node --check src/host/memory.js && node --check src/host/avatars.js && node --check src/host/templates.js && node --check src/host/architect.js && node --check src/host/compose.js && node --check src/host/tools.js && node --check src/host/actions.js && node --check src/host/routes.js && node --check src/host/main.js && node --check src/host/watchdog.js && node --check lib/client.js"
   }
 }

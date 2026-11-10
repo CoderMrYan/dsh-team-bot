@@ -5,7 +5,8 @@
  * same store and runtime the model tools use, so the panel and the agent never
  * diverge.
  */
-import { askDirect, askRoom } from './actions.js'
+import { askDirect, askRoom, assignTask } from './actions.js'
+import { askMain, commandState, ensureMain } from './main.js'
 import { createAtom } from './memory.js'
 import { composeTeam } from './compose.js'
 import { listTemplates } from './templates.js'
@@ -51,13 +52,111 @@ export function registerRoutes(ctx, store, runtime) {
       try {
         const url = new URL(req.url ?? '/', 'http://127.0.0.1')
         const parts = url.pathname.slice(PREFIX.length).split('/').filter(Boolean)
+        await store.init()
         if (parts[0] === 'health') {
           sendJson(res, 200, { ok: true })
           return
         }
         if (parts[0] === 'state' && req.method === 'GET') {
           await store.init()
-          sendJson(res, 200, { bots: store.listBots(), rooms: store.listRooms() })
+          const main = await ensureMain(store)
+          sendJson(res, 200, {
+            bots: store.listBots(),
+            rooms: store.listRooms(),
+            tasks: store.listTasks(),
+            presence: store.listPresence(),
+            activity: store.listActivity({ limit: 80 }),
+            main,
+          })
+          return
+        }
+        if (parts[0] === 'main' && parts.length === 1 && req.method === 'GET') {
+          sendJson(res, 200, await commandState(store))
+          return
+        }
+        if (parts[0] === 'main' && parts[1] === 'ask' && req.method === 'POST') {
+          const body = await readJson(req)
+          const text = typeof body.text === 'string' ? body.text.trim() : ''
+          if (text === '') {
+            sendJson(res, 400, { error: 'text is required' })
+            return
+          }
+          sendJson(res, 200, await askMain(store, runtime, { text }))
+          return
+        }
+        if (parts[0] === 'tasks' && parts.length === 1 && req.method === 'GET') {
+          sendJson(res, 200, {
+            tasks: store.listTasks({
+              ownerBotId: url.searchParams.get('owner') ?? undefined,
+              roomId: url.searchParams.get('room') ?? undefined,
+              status: url.searchParams.get('status') ?? undefined,
+            }),
+          })
+          return
+        }
+        if (parts[0] === 'tasks' && parts.length === 1 && req.method === 'POST') {
+          const body = await readJson(req)
+          sendJson(res, 200, await store.createTask({
+            title: body.title,
+            brief: body.brief,
+            ownerBotId: body.owner_bot_id,
+            roomId: body.room_id,
+            teamId: body.team_id,
+            parentId: body.parent_id,
+            createdBy: 'human',
+          }))
+          return
+        }
+        if (parts[0] === 'tasks' && parts[1] !== undefined && parts[2] === undefined && req.method === 'GET') {
+          sendJson(res, 200, store.getTask(parts[1]))
+          return
+        }
+        if (parts[0] === 'tasks' && parts[1] !== undefined && parts[2] === undefined && req.method === 'PATCH') {
+          const body = await readJson(req)
+          sendJson(res, 200, await store.updateTask(parts[1], {
+            status: body.status,
+            progress: body.progress,
+            ownerBotId: body.owner_bot_id,
+            currentStep: body.current_step,
+          }))
+          return
+        }
+        if (parts[0] === 'tasks' && parts[1] !== undefined && parts[2] === 'assign' && req.method === 'POST') {
+          const body = await readJson(req)
+          sendJson(res, 200, await assignTask(store, runtime, {
+            taskId: parts[1],
+            botId: body.bot_id,
+            instruction: body.instruction,
+          }))
+          return
+        }
+        if (parts[0] === 'tasks' && parts[1] !== undefined && parts[2] === 'report' && req.method === 'POST') {
+          const body = await readJson(req)
+          const status = body.status
+          const task = await store.updateTask(parts[1], {
+            status,
+            progress: status === 'done' ? 100 : body.progress,
+            currentStep: body.message,
+          })
+          await store.recordActivity({
+            botId: body.bot_id ?? task.ownerBotId,
+            taskId: task.id,
+            kind: 'report',
+            label: status === 'blocked' ? '阻塞上报' : '进度上报',
+            detail: body.message,
+            status: status === 'blocked' ? 'error' : 'done',
+          })
+          sendJson(res, 200, store.getTask(task.id))
+          return
+        }
+        if (parts[0] === 'activity' && req.method === 'GET') {
+          sendJson(res, 200, {
+            activity: store.listActivity({
+              botId: url.searchParams.get('bot') ?? undefined,
+              taskId: url.searchParams.get('task') ?? undefined,
+              limit: Number(url.searchParams.get('limit') ?? 100),
+            }),
+          })
           return
         }
         if (parts[0] === 'templates' && req.method === 'GET') {

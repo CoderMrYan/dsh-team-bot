@@ -45,7 +45,7 @@ async function readJson(req, limit = 1_000_000) {
  * @param {import('./runtime.js').BotRuntime} runtime
  * @returns {() => void} route disposer
  */
-export function registerRoutes(ctx, store, runtime) {
+export function registerRoutes(ctx, store, runtime, approvalBridge) {
   return ctx.webServer.register({
     kind: 'prefix',
     path: PREFIX,
@@ -68,12 +68,36 @@ export function registerRoutes(ctx, store, runtime) {
             presence: store.listPresence(),
             activity: store.listActivity({ limit: 80 }),
             approvals: store.listApprovals({ status: 'pending' }),
+            approvalDebug: approvalBridge?.stats?.(),
             main,
           })
           return
         }
         if (parts[0] === 'main' && parts.length === 1 && req.method === 'GET') {
           sendJson(res, 200, await commandState(store))
+          return
+        }
+        if (parts[0] === 'main' && parts[1] === 'cancel' && req.method === 'POST') {
+          const main = await ensureMain(store)
+          let accepted = false
+          try {
+            if (main.sessionId !== '') {
+              ctx.sessionController.cancel({ sessionId: main.sessionId })
+              accepted = true
+            }
+          } catch {
+            accepted = false
+          }
+          await store.setPresence(main.id, { status: 'idle', taskId: '', action: '已取消' })
+          await store.recordActivity({
+            botId: main.id,
+            taskId: '',
+            kind: 'cancel',
+            label: '主 Bot 已停止',
+            detail: '用户从指挥台取消当前回合',
+            status: 'done',
+          })
+          sendJson(res, 200, { accepted })
           return
         }
         if (parts[0] === 'main' && parts[1] === 'ask' && req.method === 'POST') {
@@ -92,30 +116,63 @@ export function registerRoutes(ctx, store, runtime) {
         }
         if (parts[0] === 'approvals' && parts[1] !== undefined && parts[2] !== undefined && req.method === 'POST') {
           if (parts[2] === 'approve') {
-            const approval = await store.resolveApproval(parts[1], 'approved')
-            const result = await executeApproval(store, approval.id)
+            const approval = store.getApproval(parts[1])
+            if (approval.kind === 'tool.approval') {
+              const handled = await approvalBridge.resolve(approval.id, 'allowed-once')
+              if (!handled) {
+                sendJson(res, 409, { error: '这个工具授权已失效或已经处理' })
+                return
+              }
+              await store.recordActivity({
+                botId: approval.requestedBy,
+                taskId: '',
+                kind: 'approval',
+                label: '已授权工具',
+                detail: approval.summary,
+                status: 'done',
+              })
+              sendJson(res, 200, { approved: true, handled: true, approval: store.getApproval(approval.id) })
+              return
+            }
+            const resolved = await store.resolveApproval(parts[1], 'approved')
+            const result = await executeApproval(store, resolved.id)
             await store.recordActivity({
-              botId: approval.requestedBy,
+              botId: resolved.requestedBy,
               taskId: '',
               kind: 'approval',
               label: '已批准',
-              detail: approval.summary,
+              detail: resolved.summary,
               status: 'done',
             })
             sendJson(res, 200, result)
             return
           }
           if (parts[2] === 'reject') {
-            const approval = await store.resolveApproval(parts[1], 'rejected')
+            const approval = store.getApproval(parts[1])
+            if (approval.kind === 'tool.approval') {
+              const handled = await approvalBridge.resolve(approval.id, 'rejected')
+              if (!handled) await store.resolveApproval(approval.id, 'rejected').catch(() => undefined)
+              await store.recordActivity({
+                botId: approval.requestedBy,
+                taskId: '',
+                kind: 'approval',
+                label: '已拒绝工具',
+                detail: approval.summary,
+                status: 'error',
+              })
+              sendJson(res, 200, { rejected: true, handled, approval: store.getApproval(approval.id) })
+              return
+            }
+            const resolved = await store.resolveApproval(parts[1], 'rejected')
             await store.recordActivity({
-              botId: approval.requestedBy,
+              botId: resolved.requestedBy,
               taskId: '',
               kind: 'approval',
               label: '已拒绝',
-              detail: approval.summary,
+              detail: resolved.summary,
               status: 'error',
             })
-            sendJson(res, 200, { rejected: true, approval })
+            sendJson(res, 200, { rejected: true, approval: resolved })
             return
           }
         }

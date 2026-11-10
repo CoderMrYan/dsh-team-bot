@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.13.7 — 2026-11-10
+
+### Added
+
+- **Stop Main Bot** button in the command center whenever the Main Bot is `thinking`, `tool` or `waiting`; `POST /main/cancel` cancels the live session and clears presence.
+- **Tool-stall detection**: a tool call with no event for 60 seconds flips the bot to `waiting` with “工具长时间未返回，可能在等待授权”; the user can stop the turn instead of waiting forever.
+- **Tool approval bridge** for DSH `approval/request` (best effort): team-owned sessions create a pending approval card and the decision is sent back as `allowed-once`/`rejected`.
+- **Tool failure detail**: `tool/result` error text is now written to activity and task steps, so “approval … cancelled” is visible rather than an empty “工具失败”.
+
+### Fixed
+
+- Runtime turn timeout explicitly cancels the Session and clears a stale `thinking` presence.
+- Main/task prompts now forbid `danger-full-access`, require a blocked report when approval is unavailable, and forbid retrying the same cancelled approval.
+
 ## 0.13.6 — 2026-11-10
 
 ### Fixed

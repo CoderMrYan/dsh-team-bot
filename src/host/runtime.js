@@ -63,7 +63,9 @@ TASK CONTRACT
 - Owner: ${task.ownerBotId || 'you'}
 - Call team_task_report({ task_id: "${task.id}", status: "running", progress: 10, message: "..." }) at start, at every milestone, when blocked, and when finished.
 - Put deliverables in the shared team workspace and report their paths with team_task_artifact when possible.
+- Do not set sandbox_permissions to "danger-full-access" from a team bot. Work inside the shared workspace; if the task truly needs full machine access, report blocked and let the Lead enable it explicitly.
 - If another bot owns the next stage, call team_handoff with this task id and the target bot id instead of doing everything yourself.
+- If a tool returns an approval cancelled/unavailable error, do not retry the same call. Report the blocker and ask the Lead to change the DSH execution policy or use a workspace/session with shell access.
 - If you need a decision or are blocked, report status "blocked" with the concrete question. Do not silently stall.`
 }
 
@@ -174,6 +176,8 @@ Operating rules:
 - Keep the Lead informed with short progress updates, especially after a command, a handoff, a block, and a completion.
 - Do not claim a sub-bot did work unless the task/activity log shows it.
 - Destructive actions (deleting bots, rooms, teams or tasks) create a pending approval. Tell the Lead to approve it in the command center, then call the same tool with its approval_id. Never claim a destructive action succeeded before it is approved and executed.
+- Do not request danger-full-access from team bots. Keep work in the shared workspace; if full machine access is required, ask the Lead to change the DSH policy.
+- If a tool call fails with “approval ... cancelled/unavailable”, do not retry it. Explain that DSH's approval answerer is unavailable and ask the Lead to switch the DSH session to full access or use a shell-capable workspace.
 - Reply in Chinese unless the Lead writes in another language. Be concise and operational.
 - If you are only chatting, do not invent tool calls.`
 }
@@ -286,11 +290,15 @@ export class BotRuntime {
     if (event.type === 'tool/result') {
       const callId = String(data.message?.toolCallId ?? '')
       const failed = data.message?.isError === true || data.error !== undefined
+      const resultText = textOf(data.message?.content)
+      const failureText = compact(
+        String(data.error?.reason ?? data.error?.message ?? resultText),
+      )
       if (taskId !== '' && callId !== '') {
         try {
           await this.store.finishTaskStep(taskId, callId, {
             status: failed ? 'error' : 'done',
-            detail: failed ? String(data.error?.reason ?? '') : '',
+            detail: failed ? failureText : '',
           })
         } catch {
           // Ignore missing task/step after a restart.
@@ -299,7 +307,7 @@ export class BotRuntime {
       try {
         await this.store.finishActivity(callId, {
           status: failed ? 'error' : 'done',
-          detail: failed ? String(data.error?.reason ?? '') : '',
+          detail: failed ? failureText : '',
         })
       } catch {
         // Activity is observability only.
@@ -310,7 +318,7 @@ export class BotRuntime {
         taskId,
         kind: 'tool-result',
         label: failed ? '工具失败' : '工具完成',
-        detail: failed ? String(data.error?.reason ?? data.message?.source?.toolName ?? '') : '',
+        detail: failed ? failureText : '',
         status: failed ? 'error' : 'done',
         callId,
       })
@@ -379,47 +387,76 @@ export class BotRuntime {
     await this.presence(bot, { status: 'thinking', action: '接收任务', taskId })
     const before = await this.events(sessionId, fused)
     let lastSeq = before.at(-1)?.seq ?? -1
-    await this.ctx.sessionController.prompt(
-      {
-        requestId: `team-bot-${randomUUID()}`,
-        sessionId,
-        mode: 'queue',
-        content: [{ type: 'text', text: prompt }],
-      },
-      fused,
-    )
-    const deadline = Date.now() + this.timeoutMs
-    let assistantText = ''
+    let ended = false
+    let lastEventAt = Date.now()
+    let toolRunning = false
+    let stallNotified = false
+    const cancelTimer = setTimeout(() => {
+      try {
+        this.ctx.sessionController.cancel({ sessionId })
+      } catch {
+        // The turn may have already settled.
+      }
+    }, this.timeoutMs + 1_000)
+    cancelTimer.unref?.()
     try {
+      await this.ctx.sessionController.prompt(
+        {
+          requestId: `team-bot-${randomUUID()}`,
+          sessionId,
+          mode: 'queue',
+          content: [{ type: 'text', text: prompt }],
+        },
+        fused,
+      )
+      const deadline = Date.now() + this.timeoutMs
+      let assistantText = ''
       while (Date.now() < deadline) {
         if (fused.aborted) throw new Error('team-bot turn aborted')
         await sleep(this.pollMs, fused)
         const events = await this.events(sessionId, fused)
         const fresh = events.filter((event) => event.seq > lastSeq)
+        if (fresh.length > 0) {
+          lastEventAt = Date.now()
+          stallNotified = false
+        }
         for (const event of fresh) {
           lastSeq = event.seq
+          if (event.type === 'tool/call') toolRunning = true
+          if (event.type === 'tool/result' || event.type === 'assistant/message' || event.type === 'turn/end') {
+            toolRunning = false
+          }
           await this.handleEvent(bot, event, { taskId })
           if (event.type === 'assistant/message') {
             const text = textOf(event.data?.message?.content)
             if (text !== '') assistantText = text
           }
           if (event.type === 'turn/end') {
+            ended = true
             return assistantText
           }
         }
+        if (toolRunning && !stallNotified && Date.now() - lastEventAt > 60_000) {
+          stallNotified = true
+          await this.presence(bot, { status: 'waiting', action: '工具长时间未返回，可能在等待授权', taskId })
+          await this.activity({
+            botId: bot.id,
+            taskId,
+            kind: 'watchdog',
+            label: '工具长时间未返回',
+            detail: '可能在等待 DSH 授权或外部进程；可在指挥台停止回合。',
+            status: 'error',
+          })
+        }
       }
+      throw new Error(`team-bot turn timed out after ${this.timeoutMs}ms`)
     } finally {
+      clearTimeout(cancelTimer)
       this.active.delete(bot.id)
-    }
-    if (taskId !== '') {
-      try {
-        await this.store.updateTask(taskId, { status: 'blocked', currentStep: '执行超时' })
-      } catch {
-        // ignore
+      if (!ended) {
+        await this.presence(bot, { status: 'blocked', action: '回合中断', taskId: '' })
       }
     }
-    await this.presence(bot, { status: 'blocked', action: '执行超时', taskId: '' })
-    throw new Error(`team-bot turn timed out after ${this.timeoutMs}ms`)
   }
 }
 

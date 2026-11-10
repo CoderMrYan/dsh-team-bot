@@ -13,9 +13,10 @@ import { BotRuntime } from './runtime.js'
 import { createTools } from './tools.js'
 import { registerRoutes } from './routes.js'
 import { startWatchdog } from './watchdog.js'
+import { installToolApprovalBridge } from './tool-approvals.js'
 
 export const name = 'team-bot'
-export const inject = ['tools', 'sessionController', 'webServer']
+export const inject = ['tools', 'sessionController', 'webServer', 'approval', 'agents']
 
 export const Config = z.object({
   dataDir: z.string().default(''),
@@ -38,9 +39,11 @@ export function apply(ctx, config = {}) {
   mkdirSync(workspaceRoot, { recursive: true })
   const store = new TeamStore(dataDir)
   const runtime = new BotRuntime(ctx, store, { workspaceRoot })
+  const approvalBridge = installToolApprovalBridge(ctx, store)
   const disposers = []
   for (const definition of createTools(store, runtime)) disposers.push(ctx.tools.register(definition))
-  disposers.push(registerRoutes(ctx, store, runtime))
+  disposers.push(registerRoutes(ctx, store, runtime, approvalBridge))
+  disposers.push(approvalBridge.dispose)
   disposers.push(startWatchdog(store, runtime))
   ctx.effect(() => () => {
     for (const dispose of disposers.reverse()) dispose()

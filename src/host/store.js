@@ -454,6 +454,18 @@ export class TeamStore {
       .slice(-limit)
   }
 
+  /** Close the activity row matching one tool call. */
+  async finishActivity(callId, patch = {}) {
+    await this.init()
+    if (callId === '') return undefined
+    const row = [...this.state.activities].reverse().find((activity) => activity.callId === callId)
+    if (row === undefined) return undefined
+    row.status = String(patch.status ?? 'done')
+    if (patch.detail !== undefined) row.detail = String(patch.detail)
+    await this.save()
+    return row
+  }
+
   /** Persist one bot presence snapshot. */
   async setPresence(botId, patch = {}) {
     await this.init()
@@ -485,6 +497,21 @@ export class TeamStore {
   /** @returns {object[]} */
   listRooms() {
     return Object.values(this.state.rooms)
+  }
+
+  /** Delete one bot profile. It must not be the Main Bot or a room member. */
+  async deleteBot(botId) {
+    await this.init()
+    const bot = this.getBot(botId)
+    if (bot.isMain === true) throw new Error('cannot delete the Main Bot')
+    const memberOf = this.listRooms().filter((room) => room.members.includes(botId))
+    if (memberOf.length > 0) {
+      throw new Error(`bot is still a member of: ${memberOf.map((room) => room.name).join(', ')}`)
+    }
+    delete this.state.bots[botId]
+    delete this.state.presence[botId]
+    await this.save()
+    return { id: botId, deleted: true }
   }
 
   /** @param {string} roomId */

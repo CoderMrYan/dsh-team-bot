@@ -138,7 +138,7 @@ Work the task now. Use your tools to inspect files, run commands, search the web
 }
 
 /** @returns {string} the model-facing prompt for the main orchestrator. */
-export function buildMainPrompt(mainBot, bots, rooms, tasks, presence) {
+export function buildMainPrompt(mainBot, bots, rooms, tasks, presence, command = '') {
   const botLines = bots.map((bot) => `- ${bot.id} ${bot.name} | ${bot.role} | ${bot.isMain ? 'MAIN' : 'sub-bot'}`).join('\n')
   const roomLines = rooms.map((room) => `- ${room.id} ${room.name} | members: ${room.members.join(', ')} | chief: ${room.chiefId || 'none'}`).join('\n')
   const taskLines = tasks.slice(0, 20).map((task) => `- ${task.id} [${task.status}] ${task.title} | owner: ${task.ownerBotId || 'unassigned'} | ${task.currentStep || 'no step'}`).join('\n')
@@ -159,8 +159,12 @@ ${taskLines || '- no tasks yet'}
 Live presence:
 ${presenceLines || '- no presence yet'}
 
+The Lead's latest command (act on this now):
+${command || '(none)'}
+
 Operating rules:
 - For non-trivial work, create a task first (team_task_create), then create or choose a sub-bot and assign it (team_task_assign).
+- If the task belongs to a room, pass room_id when creating it; if it was created without one, bind it with team_task_update(room_id).
 - A sub-bot must report through team_task_report; when you need a status, call team_task_status or read the task.
 - Keep the Lead informed with short progress updates, especially after a command, a handoff, a block, and a completion.
 - Do not claim a sub-bot did work unless the task/activity log shows it.
@@ -285,6 +289,14 @@ export class BotRuntime {
         } catch {
           // Ignore missing task/step after a restart.
         }
+      }
+      try {
+        await this.store.finishActivity(callId, {
+          status: failed ? 'error' : 'done',
+          detail: failed ? String(data.error?.reason ?? '') : '',
+        })
+      } catch {
+        // Activity is observability only.
       }
       await this.presence(bot, { status: 'thinking', action: failed ? '工具失败，继续处理' : '读取工具结果', taskId })
       await this.activity({

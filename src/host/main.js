@@ -65,7 +65,7 @@ export async function askMain(store, runtime, input, signal) {
     sender: { type: 'human', name: 'human' },
     text: input.text,
   })
-  const prompt = buildMainPrompt(main, state.bots, state.rooms, state.tasks, state.presence)
+  const prompt = buildMainPrompt(main, state.bots, state.rooms, state.tasks, state.presence, input.text)
   const text = (await runtime.ask(main, prompt, signal)).trim()
   if (text === '' || text === '[PASS]') {
     return { main, posted, reply: undefined }

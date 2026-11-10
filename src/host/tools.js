@@ -103,6 +103,7 @@ export function createTools(store, runtime) {
         status: { type: 'string', enum: ['queued', 'running', 'waiting', 'blocked', 'done', 'failed'], description: 'New status.' },
         progress: { type: 'integer', description: '0-100.' },
         owner_bot_id: { type: 'string', description: 'New owner bot id.' },
+        room_id: { type: 'string', description: 'Bind the task to a room id (optional).' },
         current_step: { type: 'string', description: 'Short current step label.' },
       },
       output: jsonOutput(),
@@ -111,6 +112,7 @@ export function createTools(store, runtime) {
           status: args.status,
           progress: args.progress,
           ownerBotId: args.owner_bot_id,
+          roomId: args.room_id,
           currentStep: args.current_step,
         })
         if (['done', 'failed', 'blocked'].includes(task.status) && task.ownerBotId !== '') {
@@ -285,6 +287,20 @@ export function createTools(store, runtime) {
     }),
 
     defineTool({
+      name: 'team_bot_delete',
+      description: 'Delete one sub-bot profile. The Main Bot cannot be deleted and a bot in a room must be removed from the room first. Destructive: require explicit Lead confirmation.',
+      parameters: {
+        bot_id: { type: 'string', required: true, description: 'Bot id.' },
+        confirm: { type: 'boolean', required: true, description: 'Must be true after explicit user confirmation.' },
+      },
+      output: jsonOutput(),
+      async execute(args) {
+        if (args.confirm !== true) throw new Error('explicit confirmation is required')
+        return await store.deleteBot(args.bot_id)
+      },
+    }),
+
+    defineTool({
       name: 'team_room_create',
       description:
         'Create one shared room with a member list, a chief, and a reply policy. Mention routing is the default.',
@@ -352,26 +368,30 @@ export function createTools(store, runtime) {
 
     defineTool({
       name: 'team_room_delete',
-      description: 'Delete one room and its timeline/memory files.',
+      description: 'Delete one room and its timeline/memory files. Destructive: require explicit Lead confirmation.',
       parameters: {
         room_id: { type: 'string', required: true, description: 'Room id.' },
+        confirm: { type: 'boolean', required: true, description: 'Must be true after explicit user confirmation.' },
       },
       output: jsonOutput(),
       async execute(args) {
         await store.init()
+        if (args.confirm !== true) throw new Error('explicit confirmation is required')
         return await store.deleteRoom(args.room_id)
       },
     }),
 
     defineTool({
       name: 'team_delete',
-      description: 'Delete every room and bot that belongs to one team.',
+      description: 'Delete every room and bot that belongs to one team. Destructive: require explicit Lead confirmation.',
       parameters: {
         team_id: { type: 'string', required: true, description: 'Team id from team_compose.' },
+        confirm: { type: 'boolean', required: true, description: 'Must be true after explicit user confirmation.' },
       },
       output: jsonOutput(),
       async execute(args) {
         await store.init()
+        if (args.confirm !== true) throw new Error('explicit confirmation is required')
         return await store.deleteTeam(args.team_id)
       },
     }),

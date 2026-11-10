@@ -4,7 +4,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-> 状态：**0.13.0** — 常驻主 Bot 指挥台、可追踪任务/步骤/产物、每个 Bot 的工具级实时活动与在线状态、共享本机 workspace、看门狗告警，以及原有的房间/记忆/手机 UI。从 GitHub 安装；npm 发布是可选项，暂未发布。
+> 状态：**0.13.1** — 常驻主 Bot 指挥台、可追踪任务/步骤/产物、每个 Bot 的工具级实时活动与在线状态、共享本机 workspace、看门狗告警，以及原有的房间/记忆/手机 UI。从 GitHub 安装；npm 发布是可选项，暂未发布。
 
 ## 本机 workspace 与安全边界
 
@@ -18,6 +18,14 @@
 - 不要在 workspace 里放 SSH key、token、客户隐私数据；prompt injection 可能诱导 Bot 读取/外发文件。
 
 看门狗只负责发现“长时间没有新进展”，不会绕过审批替你执行危险操作。
+
+## 从 0.12 迁移
+
+- `state.json` 会在首次加载时自动补齐 `tasks / activities / presence / main` 字段，原有 bot、房间、消息和记忆保留；
+- 首次打开面板时会自动创建 `主 Bot`（如果不存在），不会自动把它拉进已有房间；
+- 需要重启 DSH 或重载插件让 Host 代码生效，然后强制刷新浏览器加载新面板；
+- 任务 workspace 默认在 `$DSH_HOME/dsh-team-bot/workspace`，已有 bot 的 `workspace` 字段优先；
+- 旧的房间群聊仍可用，新的指挥台是默认入口。
 
 ## 为什么做这个
 

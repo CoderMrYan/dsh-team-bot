@@ -117,6 +117,7 @@ export function registerRoutes(ctx, store, runtime) {
             status: body.status,
             progress: body.progress,
             ownerBotId: body.owner_bot_id,
+            roomId: body.room_id,
             currentStep: body.current_step,
           })
           if (['done', 'failed', 'blocked'].includes(task.status) && task.ownerBotId !== '') {
@@ -169,6 +170,10 @@ export function registerRoutes(ctx, store, runtime) {
               limit: Number(url.searchParams.get('limit') ?? 100),
             }),
           })
+          return
+        }
+        if (parts[0] === 'bots' && parts[1] !== undefined && req.method === 'DELETE') {
+          sendJson(res, 200, await store.deleteBot(parts[1]))
           return
         }
         if (parts[0] === 'templates' && req.method === 'GET') {

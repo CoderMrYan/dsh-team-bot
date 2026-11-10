@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.13.1 — 2026-11-10
+
+### Fixed
+
+- **Main Bot ignored the Lead's command** because `buildMainPrompt()` rendered team state but not the current message. The command is now included in the prompt.
+- A task's `run` step stayed `running` after `turn/end`, causing false watchdog alerts; run steps are now closed on every turn end.
+- The watchdog treated `waiting` (awaiting acceptance) as stalled; it now monitors only `running` tasks.
+- Tool activity rows now close when the matching `tool/result` arrives instead of staying `running`.
+- Deleting a task now clears the owner's stale presence.
+
+### Added
+
+- `team_bot_delete` with explicit confirmation and room-membership protection.
+- `room_id` binding on `team_task_update`, so a task can be attached to a room after creation.
+- Explicit confirmation on room/team deletion tools.
+
 ## 0.13.0 — 2026-11-10
 
 ### Added

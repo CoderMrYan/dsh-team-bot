@@ -94,6 +94,7 @@ test('runtime records tool activity and closes the task on turn end', async () =
     }, { taskId: task.id })
     latest = store.getTask(task.id)
     assert.equal(latest.steps.find((item) => item.callId === 'call-9').status, 'done')
+    assert.equal(store.listActivity({ taskId: task.id }).find((item) => item.callId === 'call-9').status, 'done')
     await runtime.handleEvent(bot, {
       seq: 3,
       type: 'turn/end',

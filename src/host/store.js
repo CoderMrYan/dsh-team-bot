@@ -281,6 +281,15 @@ export class TeamStore {
     return this.normalizeTask(task)
   }
 
+  /** Delete one task record; activity rows remain as an audit trail. */
+  async deleteTask(taskId) {
+    await this.init()
+    if (this.state.tasks[taskId] === undefined) throw new Error(`unknown task: ${taskId}`)
+    delete this.state.tasks[taskId]
+    await this.save()
+    return { id: taskId, deleted: true }
+  }
+
   /** Update task fields and touch its timestamp. */
   async updateTask(taskId, patch = {}) {
     await this.init()

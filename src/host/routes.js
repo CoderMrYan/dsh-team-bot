@@ -129,6 +129,10 @@ export function registerRoutes(ctx, store, runtime) {
           sendJson(res, 200, task)
           return
         }
+        if (parts[0] === 'tasks' && parts[1] !== undefined && parts[2] === undefined && req.method === 'DELETE') {
+          sendJson(res, 200, await store.deleteTask(parts[1]))
+          return
+        }
         if (parts[0] === 'tasks' && parts[1] !== undefined && parts[2] === 'assign' && req.method === 'POST') {
           const body = await readJson(req)
           sendJson(res, 200, await assignTask(store, runtime, {

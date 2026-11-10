@@ -163,6 +163,20 @@ export function createTools(store, runtime) {
     }),
 
     defineTool({
+      name: 'team_task_delete',
+      description: 'Delete one task record. Destructive: only call after the Lead explicitly confirms.',
+      parameters: {
+        task_id: { type: 'string', required: true, description: 'Task id.' },
+        confirm: { type: 'boolean', required: true, description: 'Must be true after explicit user confirmation.' },
+      },
+      output: jsonOutput(),
+      async execute(args) {
+        if (args.confirm !== true) throw new Error('explicit confirmation is required')
+        return await store.deleteTask(args.task_id)
+      },
+    }),
+
+    defineTool({
       name: 'team_task_artifact',
       description: 'Register one deliverable file path (inside the shared team workspace) on a task.',
       parameters: {

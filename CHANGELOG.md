@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.13.6 — 2026-11-10
+
+### Fixed
+
+- **Delete Bot appeared to do nothing**: `window.confirm` could be suppressed by the host, and API errors were rendered behind the drawer. Deletion now uses an inline two-step confirmation (`删除 Bot` → `确认删除`) and shows the concrete blocker inside the drawer. Bots that are still room members get a clear “先移出房间” message instead of a silent failure.
+- **Bot drawer was pinned to the top-right**: it now anchors to the clicked bot row (desktop opens to the left of the row, aligned vertically; mobile remains a bottom sheet). A dependency-free UI test verifies the anchor coordinates.
+- **Bot list was too short**: the roster min-height is 300px and the desktop max-height is `calc(100vh - 300px)`, so more bots are visible before scrolling.
+
 ## 0.13.5 — 2026-11-10
 
 ### Fixed

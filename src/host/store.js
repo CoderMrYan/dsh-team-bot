@@ -359,8 +359,7 @@ export class TeamStore {
   }
 
   /** Close the tool step matching one callId, if it is still open. */
-  async finishTaskStep(taskId, callId, patch = {}) {
-    await this.init()
+  async finishTaskStep(taskId, callId, patch = {}) {    await this.init()
     const task = this.state.tasks[taskId]
     if (task === undefined) return undefined
     const steps = Array.isArray(task.steps) ? task.steps : []
@@ -374,6 +373,28 @@ export class TeamStore {
     task.updatedAt = matching.at(-1).ts
     await this.save()
     return matching.at(-1)
+  }
+
+  /** Close every still-running step of one kind (for example the run step on turn end). */
+  async finishOpenTaskSteps(taskId, status = 'done', detail = '', kind = '') {
+    await this.init()
+    const task = this.state.tasks[taskId]
+    if (task === undefined) return 0
+    const steps = Array.isArray(task.steps) ? task.steps : []
+    let changed = 0
+    for (const step of steps) {
+      if (step.status !== 'running') continue
+      if (kind !== '' && step.kind !== kind) continue
+      step.status = status
+      if (detail !== '') step.detail = detail
+      step.ts = new Date().toISOString()
+      changed += 1
+    }
+    if (changed > 0) {
+      task.updatedAt = new Date().toISOString()
+      await this.save()
+    }
+    return changed
   }
 
   /** Append one global activity row; task-linked rows also become task steps. */

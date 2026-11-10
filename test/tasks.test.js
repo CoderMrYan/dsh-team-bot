@@ -54,9 +54,16 @@ test('tasks carry owner, steps, progress, artifacts and activity', async () => {
       status: 'running',
     })
     await store.finishTaskStep(task.id, 'call-1', { status: 'done' })
+    const runStep = await store.addTaskStep(task.id, {
+      kind: 'run',
+      label: '开始执行',
+      status: 'running',
+    })
+    await store.finishOpenTaskSteps(task.id, 'done', '本轮执行结束', 'run')
     await store.addTaskArtifact(task.id, { name: 'notes.md', path: 'notes.md' })
     const latest = store.getTask(task.id)
     assert.equal(latest.steps.find((item) => item.callId === 'call-1').status, 'done')
+    assert.equal(latest.steps.find((item) => item.id === runStep.id).status, 'done')
     assert.equal(latest.artifacts[0].name, 'notes.md')
     assert.equal(store.listActivity({ taskId: task.id }).length, 1)
     assert.equal(store.listTasks({ ownerBotId: bot.id }).length, 1)

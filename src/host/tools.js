@@ -107,12 +107,20 @@ export function createTools(store, runtime) {
       },
       output: jsonOutput(),
       async execute(args) {
-        return await store.updateTask(args.task_id, {
+        const task = await store.updateTask(args.task_id, {
           status: args.status,
           progress: args.progress,
           ownerBotId: args.owner_bot_id,
           currentStep: args.current_step,
         })
+        if (['done', 'failed', 'blocked'].includes(task.status) && task.ownerBotId !== '') {
+          await store.setPresence(task.ownerBotId, {
+            status: task.status === 'blocked' ? 'blocked' : 'idle',
+            taskId: task.status === 'blocked' ? task.id : '',
+            action: args.current_step ?? args.status,
+          }).catch(() => undefined)
+        }
+        return task
       },
     }),
 

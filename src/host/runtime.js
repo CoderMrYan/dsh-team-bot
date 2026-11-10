@@ -318,6 +318,12 @@ export class BotRuntime {
       if (taskId !== '') {
         try {
           const task = this.store.getTask(taskId)
+          await this.store.finishOpenTaskSteps(
+            taskId,
+            reason === 'completed' ? 'done' : 'error',
+            reason === 'completed' ? '本轮执行结束' : `本轮结束：${reason}`,
+            'run',
+          )
           if (reason === 'error') {
             await this.store.updateTask(taskId, { status: 'failed', currentStep: '执行失败' })
           } else if (reason === 'blocked' || reason === 'aborted') {

@@ -15,7 +15,7 @@ export function startWatchdog(store, runtime, options = {}) {
     try {
       await store.init()
       const now = Date.now()
-      const active = store.listTasks({ status: ['running', 'waiting'] })
+      const active = store.listTasks({ status: ['running'] })
       for (const task of active) {
         const updated = Date.parse(task.updatedAt)
         if (!Number.isFinite(updated) || now - updated < staleMs) continue

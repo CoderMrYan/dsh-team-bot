@@ -113,12 +113,20 @@ export function registerRoutes(ctx, store, runtime) {
         }
         if (parts[0] === 'tasks' && parts[1] !== undefined && parts[2] === undefined && req.method === 'PATCH') {
           const body = await readJson(req)
-          sendJson(res, 200, await store.updateTask(parts[1], {
+          const task = await store.updateTask(parts[1], {
             status: body.status,
             progress: body.progress,
             ownerBotId: body.owner_bot_id,
             currentStep: body.current_step,
-          }))
+          })
+          if (['done', 'failed', 'blocked'].includes(task.status) && task.ownerBotId !== '') {
+            await store.setPresence(task.ownerBotId, {
+              status: task.status === 'blocked' ? 'blocked' : 'idle',
+              taskId: task.status === 'blocked' ? task.id : '',
+              action: body.current_step ?? task.status,
+            })
+          }
+          sendJson(res, 200, task)
           return
         }
         if (parts[0] === 'tasks' && parts[1] !== undefined && parts[2] === 'assign' && req.method === 'POST') {

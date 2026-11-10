@@ -5,7 +5,7 @@
  * decisions. P1 adds the real-Session runtime that turns `routed` into replies.
  */
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import { askDirect, askRoom, assignTask } from './actions.js'
+import { askDirect, askRoom, assignTask, handoffTask } from './actions.js'
 import { createAtom, createPersonaItem } from './memory.js'
 import { composeTeam } from './compose.js'
 import { commandState, ensureMain, notifyMain } from './main.js'
@@ -92,6 +92,27 @@ export function createTools(store, runtime) {
           botId: args.bot_id,
           instruction: args.instruction,
         }, exec.signal)
+      },
+    }),
+
+    defineTool({
+      name: 'team_handoff',
+      description: 'Hand a durable task to another bot asynchronously. The target bot is woken with the task contract; the current bot returns immediately. The sender must be the current owner or the Main Bot.',
+      parameters: {
+        task_id: { type: 'string', required: true, description: 'Task id.' },
+        bot_id: { type: 'string', required: true, description: 'Your bot id (the current owner).' },
+        to_bot_id: { type: 'string', required: true, description: 'Target bot id.' },
+        note: { type: 'string', description: 'Handoff note; what the next bot should do.' },
+      },
+      output: jsonOutput(),
+      timeoutMs: 30_000,
+      async execute(args) {
+        return await handoffTask(store, runtime, {
+          taskId: args.task_id,
+          fromBotId: args.bot_id,
+          toBotId: args.to_bot_id,
+          note: args.note,
+        })
       },
     }),
 

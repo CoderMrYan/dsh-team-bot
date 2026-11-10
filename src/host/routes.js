@@ -5,7 +5,7 @@
  * same store and runtime the model tools use, so the panel and the agent never
  * diverge.
  */
-import { askDirect, askRoom, assignTask } from './actions.js'
+import { askDirect, askRoom, assignTask, handoffTask } from './actions.js'
 import { askMain, commandState, ensureMain } from './main.js'
 import { createAtom } from './memory.js'
 import { composeTeam } from './compose.js'
@@ -132,6 +132,16 @@ export function registerRoutes(ctx, store, runtime) {
         }
         if (parts[0] === 'tasks' && parts[1] !== undefined && parts[2] === undefined && req.method === 'DELETE') {
           sendJson(res, 200, await store.deleteTask(parts[1]))
+          return
+        }
+        if (parts[0] === 'tasks' && parts[1] !== undefined && parts[2] === 'handoff' && req.method === 'POST') {
+          const body = await readJson(req)
+          sendJson(res, 200, await handoffTask(store, runtime, {
+            taskId: parts[1],
+            fromBotId: body.bot_id,
+            toBotId: body.to_bot_id,
+            note: body.note,
+          }))
           return
         }
         if (parts[0] === 'tasks' && parts[1] !== undefined && parts[2] === 'assign' && req.method === 'POST') {

@@ -94,6 +94,57 @@ export async function askDirect(store, runtime, input, signal) {
 }
 
 /**
+ * Transfer a task to another bot and wake the target asynchronously. The caller
+ * returns immediately; the target's turn and task steps are recorded by the
+ * normal runtime path.
+ */
+export async function handoffTask(store, runtime, input) {
+  await store.init()
+  const task = store.getTask(input.taskId)
+  const from = store.getBot(input.fromBotId)
+  const to = store.getBot(input.toBotId)
+  if (task.ownerBotId !== '' && task.ownerBotId !== from.id && from.isMain !== true) {
+    throw new Error('only the current task owner or the Main Bot can hand off this task')
+  }
+  if (to.id === from.id) throw new Error('cannot hand a task to its current owner')
+  await store.updateTask(task.id, {
+    ownerBotId: to.id,
+    status: 'queued',
+    currentStep: `交接给 ${to.name}`,
+  })
+  await store.addTaskStep(task.id, {
+    kind: 'handoff',
+    label: `交接给 ${to.name}`,
+    detail: String(input.note ?? ''),
+    status: 'done',
+  })
+  await store.setPresence(from.id, { status: 'idle', taskId: '', action: '已交接' })
+  await store.recordActivity({
+    botId: from.id,
+    taskId: task.id,
+    kind: 'handoff',
+    label: `交给 ${to.name}`,
+    detail: String(input.note ?? ''),
+    status: 'done',
+  })
+  void assignTask(store, runtime, {
+    taskId: task.id,
+    botId: to.id,
+    instruction: input.note,
+  }).catch(async (error) => {
+    await store.recordActivity({
+      botId: to.id,
+      taskId: task.id,
+      kind: 'error',
+      label: '交接执行失败',
+      detail: error instanceof Error ? error.message : String(error),
+      status: 'error',
+    }).catch(() => undefined)
+  })
+  return { task: store.getTask(task.id), queued: true, target: to.id }
+}
+
+/**
  * Run one durable task on one bot. The task ledger is updated before and after
  * the Session turn, and the runtime taps tool/step events while it runs.
  */

@@ -63,6 +63,7 @@ TASK CONTRACT
 - Owner: ${task.ownerBotId || 'you'}
 - Call team_task_report({ task_id: "${task.id}", status: "running", progress: 10, message: "..." }) at start, at every milestone, when blocked, and when finished.
 - Put deliverables in the shared team workspace and report their paths with team_task_artifact when possible.
+- If another bot owns the next stage, call team_handoff with this task id and the target bot id instead of doing everything yourself.
 - If you need a decision or are blocked, report status "blocked" with the concrete question. Do not silently stall.`
 }
 

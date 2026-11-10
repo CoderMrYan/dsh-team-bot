@@ -5,6 +5,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { TeamStore } from '../src/host/store.js'
 import { BotRuntime } from '../src/host/runtime.js'
+import { handoffTask } from '../src/host/actions.js'
 
 async function fresh() {
   const dir = await mkdtemp(path.join(os.tmpdir(), 'dsh-team-tasks-'))
@@ -103,6 +104,33 @@ test('runtime records tool activity and closes the task on turn end', async () =
     latest = store.getTask(task.id)
     assert.equal(latest.status, 'waiting')
     assert.equal(store.listPresence().find((row) => row.botId === bot.id).status, 'idle')
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('handoff transfers ownership and wakes the target bot asynchronously', async () => {
+  const { store, dir } = await fresh()
+  try {
+    const from = await store.createBot({ name: 'researcher', role: 'research' })
+    const to = await store.createBot({ name: 'writer', role: 'writing' })
+    const task = await store.createTask({ title: '接力', ownerBotId: from.id })
+    const runtime = {
+      asks: [],
+      async ask(bot, prompt, signal, context) {
+        this.asks.push({ botId: bot.id, prompt, context })
+        return '目标 Bot 已接手'
+      },
+    }
+    const handoff = handoffTask
+    assert.ok(handoff)
+    const result = await handoff(store, runtime, { taskId: task.id, fromBotId: from.id, toBotId: to.id, note: '请你继续写' })
+    assert.equal(result.queued, true)
+    await new Promise((resolve) => setTimeout(resolve, 80))
+    const latest = store.getTask(task.id)
+    assert.equal(latest.ownerBotId, to.id)
+    assert.equal(latest.steps.some((step) => step.kind === 'handoff' && step.label.includes('writer')), true)
+    assert.equal(runtime.asks[0].botId, to.id)
   } finally {
     await rm(dir, { recursive: true, force: true })
   }

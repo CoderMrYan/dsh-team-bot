@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.13.2 — 2026-11-10
+
+### Added
+
+- **Asynchronous Bot-to-Bot handoff**: `team_handoff` transfers a task to another bot, records the handoff, wakes the target in the background, and lets the sender finish its own turn.
+- **Per-bot activity filter** in the command center: click a bot to see only its tool calls, reports, and handoffs.
+- **Task room binding**: `team_task_update` accepts `room_id`, so a task created before its room can be attached afterward.
+- **Managed bot deletion**: `team_bot_delete` (confirmation required, Main Bot and room members protected).
+
+### Fixed
+
+- Tool activity rows close when their `tool/result` arrives.
+- Main Bot now receives the Lead's command in its prompt.
+- `run` steps close on turn end; watchdog no longer treats `waiting` as stalled.
+- Deleting a task clears the owner's stale presence.
+
 ## 0.13.1 — 2026-11-10
 
 ### Fixed

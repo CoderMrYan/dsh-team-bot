@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.13.4 — 2026-11-10
+
+### Fixed
+
+- Task runs now use a separate per-bot `taskSessionId` created in the shared workspace, instead of reusing the bot's chat Session. This preserves the chat history and ensures delegated work actually runs with the team workspace cwd.
+- Live verification: the researcher's chat `sessionId` stayed unchanged while its task Session was created separately; the task completed and was deleted afterward.
+
 ## 0.13.3 — 2026-11-10
 
 ### Added

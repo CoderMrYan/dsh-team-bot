@@ -1,6 +1,6 @@
 {
   "name": "dsh-team-bot",
-  "version": "0.13.3",
+  "version": "0.13.4",
   "type": "module",
   "description": "Grok Bot-style multi-agent command center for DeepSeek Harness: a persistent Main Bot, durable tasks, live bot/tool activity, shared workspace and group rooms.",
   "license": "MIT",

@@ -200,12 +200,13 @@ export class BotRuntime {
     return snapshot.events ?? []
   }
 
-  /** Resolve or create the ordinary Session owned by one bot profile. */
-  async ensureSession(bot, signal) {
-    if (typeof bot.sessionId === 'string' && bot.sessionId !== '') {
+  /** Resolve or create the Session owned by one bot profile. Task runs use a separate workspace-bound Session. */
+  async ensureSession(bot, signal, options = {}) {
+    const key = options.taskSession === true ? 'taskSessionId' : 'sessionId'
+    if (typeof bot[key] === 'string' && bot[key] !== '') {
       try {
-        const resolved = await this.ctx.sessionController.resolveAgent(bot.sessionId)
-        if (resolved?.agent !== undefined) return bot.sessionId
+        const resolved = await this.ctx.sessionController.resolveAgent(bot[key])
+        if (resolved?.agent !== undefined) return bot[key]
       } catch {
         // A deleted or unreadable Session falls through to a new one.
       }
@@ -216,9 +217,9 @@ export class BotRuntime {
     const created = await this.ctx.sessionController.create({
       ...(cwd === '' ? {} : { cwd }),
     })
-    bot.sessionId = created.sessionId
+    bot[key] = created.sessionId
     await this.store.save()
-    return bot.sessionId
+    return bot[key]
   }
 
   /**
@@ -359,7 +360,7 @@ export class BotRuntime {
   async runTurn(bot, prompt, signal, context = {}) {
     const timeout = AbortSignal.timeout(this.timeoutMs)
     const fused = signal === undefined ? timeout : AbortSignal.any([signal, timeout])
-    const sessionId = await this.ensureSession(bot, fused)
+    const sessionId = await this.ensureSession(bot, fused, { taskSession: context.taskSession === true })
     const taskId = String(context.taskId ?? '')
     this.active.set(bot.id, taskId)
     if (taskId !== '') {

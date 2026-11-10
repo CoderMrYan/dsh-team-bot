@@ -171,7 +171,7 @@ export async function assignTask(store, runtime, input, signal) {
   let replyText = ''
   try {
     const prompt = buildTaskPrompt(bot, task, room, { roomMemory, botMemory, teamMemory, query: task.brief || task.title })
-    replyText = (await runtime.ask(bot, prompt, signal, { taskId: task.id, roomId: task.roomId })).trim()
+    replyText = (await runtime.ask(bot, prompt, signal, { taskId: task.id, roomId: task.roomId, taskSession: true })).trim()
     if (replyText !== '' && replyText !== '[PASS]') {
       if (room !== undefined) {
         await store.postMessage({

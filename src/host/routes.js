@@ -11,6 +11,7 @@ import { askMain, commandState, ensureMain } from './main.js'
 import { createAtom } from './memory.js'
 import { composeTeam } from './compose.js'
 import { listTemplates } from './templates.js'
+import { buildTeamBrief } from './brief.js'
 
 const PREFIX = '/dsh-team-bot/api'
 
@@ -65,6 +66,8 @@ export function registerRoutes(ctx, store, runtime, approvalBridge, scheduler) {
             bots: store.listBots(),
             rooms: store.listRooms(),
             tasks: store.listTasks(),
+            teamCards: store.listTeamCards(),
+            heartbeat: store.getHeartbeat(),
             presence: store.listPresence(),
             activity: store.listActivity({ limit: 80 }),
             approvals: store.listApprovals({ status: 'pending' }),
@@ -343,6 +346,14 @@ export function registerRoutes(ctx, store, runtime, approvalBridge, scheduler) {
           sendJson(res, 200, task)
           return
         }
+        if (parts[0] === 'tasks' && parts[1] !== undefined && parts[2] === 'cancel' && req.method === 'POST') {
+          const body = await readJson(req)
+          const task = scheduler !== undefined
+            ? await scheduler.cancel(parts[1], body.reason)
+            : await store.cancelTask(parts[1], body.reason)
+          sendJson(res, 200, task)
+          return
+        }
         if (parts[0] === 'tasks' && parts[1] !== undefined && parts[2] === undefined && req.method === 'DELETE') {
           sendJson(res, 200, await store.deleteTask(parts[1]))
           return
@@ -415,6 +426,7 @@ export function registerRoutes(ctx, store, runtime, approvalBridge, scheduler) {
             role: body.role,
             title: body.title,
             persona: body.persona,
+            skills: body.skills,
             model: body.model,
             workspace: body.workspace,
           }))
@@ -468,6 +480,31 @@ export function registerRoutes(ctx, store, runtime, approvalBridge, scheduler) {
               : null,
             ids: list.map((entry) => entry?.id ?? entry?.name ?? '?').slice(0, 100),
           })
+          return
+        }
+        if (parts[0] === 'brief' && req.method === 'GET') {
+          sendJson(res, 200, await buildTeamBrief(store))
+          return
+        }
+        if (parts[0] === 'team-cards' && parts[1] === undefined && req.method === 'GET') {
+          sendJson(res, 200, { cards: store.listTeamCards() })
+          return
+        }
+        if (parts[0] === 'team-cards' && parts[1] !== undefined && req.method === 'GET') {
+          sendJson(res, 200, store.getTeamCard(parts[1]))
+          return
+        }
+        if (parts[0] === 'team-cards' && parts[1] !== undefined && req.method === 'PATCH') {
+          const body = await readJson(req)
+          const patch = {}
+          if (body.name !== undefined) patch.name = body.name
+          if (body.lead_bot_id !== undefined) patch.leadBotId = body.lead_bot_id
+          if (body.reviewer_bot_id !== undefined) patch.reviewerBotId = body.reviewer_bot_id
+          if (body.publisher_bot_id !== undefined) patch.publisherBotId = body.publisher_bot_id
+          if (body.rules !== undefined) patch.rules = body.rules
+          if (body.skills !== undefined) patch.skills = body.skills
+          if (body.approval_policy !== undefined) patch.approvalPolicy = body.approval_policy
+          sendJson(res, 200, await store.upsertTeamCard(parts[1], patch))
           return
         }
         if (parts[0] === 'teams' && parts[1] !== undefined && parts.length === 2 && req.method === 'PATCH') {

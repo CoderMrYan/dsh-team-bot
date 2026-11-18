@@ -16,7 +16,7 @@ import { createAvatar } from './avatars.js'
 
 const STATE_VERSION = 3
 const REPLY_MODES = new Set(['mention', 'admin', 'auto'])
-const TASK_STATUSES = new Set(['queued', 'running', 'waiting', 'in_review', 'needs_approval', 'blocked', 'done', 'failed'])
+const TASK_STATUSES = new Set(['queued', 'running', 'waiting', 'in_review', 'needs_approval', 'blocked', 'done', 'failed', 'cancelled'])
 const REVIEW_STATUSES = new Set(['none', 'pending', 'changes_requested', 'approved', 'rejected'])
 const PRESENCE_STATUSES = new Set(['idle', 'thinking', 'tool', 'waiting', 'blocked', 'offline'])
 const APPROVAL_STATUSES = new Set(['pending', 'approved', 'rejected', 'executed'])
@@ -69,6 +69,8 @@ function emptyState() {
     presence: {},
     approvals: {},
     main: { botId: '', roomId: '' },
+    teamCards: {},
+    heartbeat: { lastAt: '', lastDaily: '', attention: 0, tokens: 0 },
   }
 }
 
@@ -97,6 +99,13 @@ export class TeamStore {
         activities: Array.isArray(raw.activities) ? raw.activities : [],
         presence: raw.presence ?? {},
         approvals: raw.approvals ?? {},
+        teamCards: raw.teamCards ?? {},
+        heartbeat: {
+          lastAt: String(raw.heartbeat?.lastAt ?? ''),
+          lastDaily: String(raw.heartbeat?.lastDaily ?? ''),
+          attention: Number(raw.heartbeat?.attention) || 0,
+          tokens: Number(raw.heartbeat?.tokens) || 0,
+        },
         main: {
           botId: String(raw.main?.botId ?? ''),
           roomId: String(raw.main?.roomId ?? ''),
@@ -111,12 +120,16 @@ export class TeamStore {
       bot.teamName = String(bot.teamName ?? '')
       bot.isMain = bot.isMain === true
       bot.title = String(bot.title ?? '')
+      bot.skills = Array.isArray(bot.skills) ? bot.skills.map(String) : []
       if (bot.avatar === undefined) bot.avatar = createAvatar(bot.name, 'bot')
     }
     for (const room of Object.values(this.state.rooms)) {
       room.teamId = String(room.teamId ?? '')
       room.teamName = String(room.teamName ?? '')
       if (room.avatar === undefined) room.avatar = createAvatar(room.name, 'room')
+    }
+    for (const card of Object.values(this.state.teamCards)) {
+      Object.assign(card, this.normalizeTeamCard(card))
     }
     this.loaded = true
   }
@@ -182,6 +195,7 @@ export class TeamStore {
       role: String(input.role ?? '').trim(),
       title: String(input.title ?? '').trim(),
       persona: String(input.persona ?? '').trim(),
+      skills: Array.isArray(input.skills) ? input.skills.map(String) : [],
       model: normalizeBotModel(input.model),
       workspace: String(input.workspace ?? '').trim(),
       teamId: String(input.teamId ?? ''),
@@ -244,6 +258,10 @@ export class TeamStore {
       needsApproval: task.needsApproval === true,
       approvalStatus: String(task.approvalStatus ?? 'none'),
       approvedBy: String(task.approvedBy ?? ''),
+      cancelReason: String(task.cancelReason ?? ''),
+      cancelledAt: String(task.cancelledAt ?? ''),
+      usage: task.usage ?? { inputTokens: 0, outputTokens: 0, totalTokens: 0, calls: 0 },
+      wakeCount: Number.isInteger(task.wakeCount) ? Math.max(0, task.wakeCount) : 0,
       workspace: String(task.workspace ?? ''),
       currentStep: String(task.currentStep ?? ''),
       ownerBotId: String(task.ownerBotId ?? ''),
@@ -261,7 +279,18 @@ export class TeamStore {
     if (title === '') throw new Error('task title is required')
     const ownerBotId = String(input.ownerBotId ?? '')
     if (ownerBotId !== '') this.getBot(ownerBotId)
-    const reviewerBotId = String(input.reviewerBotId ?? '')
+    const roomId = String(input.roomId ?? '')
+    let teamId = String(input.teamId ?? '')
+    if (teamId === '' && roomId !== '') {
+      try {
+        teamId = this.getRoom(roomId).teamId
+      } catch {
+        teamId = ''
+      }
+    }
+    const cardReviewer = teamId === '' ? '' : this.getTeamCard(teamId).reviewerBotId
+    let reviewerBotId = String(input.reviewerBotId ?? '')
+    if (reviewerBotId === '' && cardReviewer !== '' && cardReviewer !== ownerBotId) reviewerBotId = cardReviewer
     if (reviewerBotId !== '') {
       this.getBot(reviewerBotId)
       if (reviewerBotId === ownerBotId) throw new Error('reviewer must be a different bot than the owner')
@@ -274,8 +303,8 @@ export class TeamStore {
       ownerBotId,
       reviewerBotId,
       needsApproval: input.needsApproval === true,
-      roomId: String(input.roomId ?? ''),
-      teamId: String(input.teamId ?? ''),
+      roomId,
+      teamId,
       parentId: String(input.parentId ?? ''),
       createdBy: String(input.createdBy ?? 'human'),
       status: TASK_STATUSES.has(input.status) ? input.status : 'queued',
@@ -646,6 +675,57 @@ export class TeamStore {
     return this.normalizeTask(task)
   }
 
+  /** Record token usage reported by one assistant step. */
+  async addTaskUsage(taskId, usage = {}) {
+    await this.init()
+    const task = this.state.tasks[taskId]
+    if (task === undefined) throw new Error(`unknown task: ${taskId}`)
+    const current = task.usage ?? { inputTokens: 0, outputTokens: 0, totalTokens: 0, calls: 0 }
+    const input = Number(usage.inputTokens) || 0
+    const output = Number(usage.outputTokens) || 0
+    const total = Number(usage.totalTokens) || input + output
+    task.usage = {
+      inputTokens: current.inputTokens + input,
+      outputTokens: current.outputTokens + output,
+      totalTokens: current.totalTokens + total,
+      cacheReadTokens: (current.cacheReadTokens ?? 0) + (Number(usage.cacheReadTokens) || 0),
+      cacheWriteTokens: (current.cacheWriteTokens ?? 0) + (Number(usage.cacheWriteTokens) || 0),
+      reasoningTokens: (current.reasoningTokens ?? 0) + (Number(usage.reasoningTokens) || 0),
+      calls: (current.calls ?? 0) + 1,
+    }
+    task.updatedAt = new Date().toISOString()
+    await this.save()
+    return task.usage
+  }
+
+  /** Count one worker wake for a task. */
+  async incrementTaskWake(taskId) {
+    await this.init()
+    const task = this.state.tasks[taskId]
+    if (task === undefined) throw new Error(`unknown task: ${taskId}`)
+    task.wakeCount = (task.wakeCount ?? 0) + 1
+    task.updatedAt = new Date().toISOString()
+    await this.save()
+    return task.wakeCount
+  }
+
+  /** Mark a task cancelled; the scheduler is responsible for stopping its Session. */
+  async cancelTask(taskId, reason = '') {
+    await this.init()
+    const task = this.state.tasks[taskId]
+    if (task === undefined) throw new Error(`unknown task: ${taskId}`)
+    if (['done', 'cancelled'].includes(task.status)) throw new Error(`task is already ${task.status}`)
+    const ts = new Date().toISOString()
+    task.status = 'cancelled'
+    task.cancelReason = String(reason)
+    task.cancelledAt = ts
+    task.currentStep = '已取消'
+    task.updatedAt = ts
+    await this.addTaskStep(task.id, { kind: 'cancel', label: '任务已取消', detail: String(reason), status: 'error', ts }, false)
+    await this.save()
+    return this.normalizeTask(task)
+  }
+
   /** Close the tool step matching one callId, if it is still open. */
   async finishTaskStep(taskId, callId, patch = {}) {    await this.init()
     const task = this.state.tasks[taskId]
@@ -785,6 +865,7 @@ export class TeamStore {
     if (patch.role !== undefined) bot.role = String(patch.role).trim()
     if (patch.title !== undefined) bot.title = String(patch.title).trim()
     if (patch.persona !== undefined) bot.persona = String(patch.persona).trim()
+    if (patch.skills !== undefined) bot.skills = Array.isArray(patch.skills) ? patch.skills.map(String) : []
     if (patch.model !== undefined) bot.model = normalizeBotModel(patch.model)
     if (patch.workspace !== undefined) bot.workspace = String(patch.workspace).trim()
     await this.save()
@@ -926,6 +1007,105 @@ export class TeamStore {
     return { teamId: String(teamId), name: next, roomIds: rooms.map((room) => room.id) }
   }
 
+  /** @returns {object} the current heartbeat snapshot. */
+  getHeartbeat() {
+    return { ...this.state.heartbeat }
+  }
+
+  /** Persist the last heartbeat/daily-brief snapshot. */
+  async setHeartbeat(patch = {}) {
+    await this.init()
+    this.state.heartbeat = {
+      ...this.state.heartbeat,
+      ...patch,
+      lastAt: String(patch.lastAt ?? this.state.heartbeat.lastAt ?? ''),
+      lastDaily: String(patch.lastDaily ?? this.state.heartbeat.lastDaily ?? ''),
+    }
+    await this.save()
+    return { ...this.state.heartbeat }
+  }
+
+  /** @returns {object} a normalized Team Card. */
+  normalizeTeamCard(card = {}) {
+    return {
+      teamId: String(card.teamId ?? ''),
+      name: String(card.name ?? ''),
+      leadBotId: String(card.leadBotId ?? ''),
+      reviewerBotId: String(card.reviewerBotId ?? ''),
+      publisherBotId: String(card.publisherBotId ?? ''),
+      rules: String(card.rules ?? ''),
+      skills: Array.isArray(card.skills) ? card.skills.map(String) : [],
+      approvalPolicy: {
+        publish: String(card.approvalPolicy?.publish ?? 'human'),
+        merge: String(card.approvalPolicy?.merge ?? 'human'),
+        spend: String(card.approvalPolicy?.spend ?? 'human'),
+        external: String(card.approvalPolicy?.external ?? 'human'),
+      },
+      createdAt: String(card.createdAt ?? ''),
+      updatedAt: String(card.updatedAt ?? ''),
+    }
+  }
+
+  /** @returns {object} a derived or stored Team Card. */
+  getTeamCard(teamId) {
+    const id = String(teamId ?? '')
+    if (id === '') return this.normalizeTeamCard({})
+    if (this.state.teamCards[id] !== undefined) return this.normalizeTeamCard(this.state.teamCards[id])
+    const rooms = Object.values(this.state.rooms).filter((room) => room.teamId === id)
+    const lead = rooms[0]?.chiefId ?? ''
+    return this.normalizeTeamCard({
+      teamId: id,
+      name: rooms[0]?.teamName ?? id,
+      leadBotId: lead,
+    })
+  }
+
+  /** @returns {object[]} all stored or derived Team Cards. */
+  listTeamCards() {
+    const ids = new Set(Object.keys(this.state.teamCards))
+    for (const room of Object.values(this.state.rooms)) {
+      if (room.teamId !== '') ids.add(room.teamId)
+    }
+    return [...ids]
+      .map((teamId) => this.getTeamCard(teamId))
+      .sort((left, right) => String(left.name).localeCompare(String(right.name)))
+  }
+
+  /** Create or update one Team Card. */
+  async upsertTeamCard(teamId, input = {}) {
+    await this.init()
+    const id = String(teamId ?? '')
+    if (id === '') throw new Error('team id is required')
+    this.assertTeam(id)
+    const existing = this.state.teamCards[id] ?? this.getTeamCard(id)
+    const next = this.normalizeTeamCard({
+      ...existing,
+      ...input,
+      teamId: id,
+      name: String(input.name ?? existing.name ?? id),
+      approvalPolicy: {
+        ...existing.approvalPolicy,
+        ...(input.approvalPolicy ?? {}),
+      },
+    })
+    for (const field of ['leadBotId', 'reviewerBotId', 'publisherBotId']) {
+      const botId = next[field]
+      if (botId === '') continue
+      const bot = this.getBot(botId)
+      if (bot.teamId !== '' && bot.teamId !== id) throw new Error(`${field} must belong to this team`)
+    }
+    if (next.reviewerBotId !== '' && next.reviewerBotId === next.leadBotId) {
+      throw new Error('reviewer must be different from the team lead')
+    }
+    if (Array.isArray(input.skills)) next.skills = input.skills.map(String)
+    const ts = new Date().toISOString()
+    next.createdAt = existing.createdAt || ts
+    next.updatedAt = ts
+    this.state.teamCards[id] = next
+    await this.save()
+    return this.normalizeTeamCard(next)
+  }
+
   /** Delete every room and bot that belongs to one team. */
   async deleteTeam(teamId) {
     await this.init()
@@ -935,6 +1115,7 @@ export class TeamStore {
     const botIds = Object.values(this.state.bots).filter((bot) => bot.teamId === id).map((bot) => bot.id)
     for (const roomId of roomIds) delete this.state.rooms[roomId]
     for (const botId of botIds) delete this.state.bots[botId]
+    delete this.state.teamCards[id]
     await this.save()
     for (const roomId of roomIds) {
       await rm(this.messagesPath(roomId), { force: true }).catch(() => undefined)

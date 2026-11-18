@@ -80,3 +80,20 @@ test('scheduler de-duplicates the same task', async () => {
     await rm(dir, { recursive: true, force: true })
   }
 })
+
+test('scheduler cancels a queued task', async () => {
+  const { dir, store, bots, tasks, scheduler } = await fresh(1)
+  try {
+    await scheduler.schedule(tasks[0].id, bots[0].id)
+    await scheduler.schedule(tasks[1].id, bots[1].id)
+    const cancelled = await scheduler.cancel(tasks[1].id, 'no longer needed')
+    assert.equal(cancelled.status, 'cancelled')
+    assert.equal(scheduler.status().queued.length, 0)
+    assert.equal(store.getTask(tasks[1].id).cancelReason, 'no longer needed')
+    await settle(scheduler)
+  } finally {
+    scheduler.close()
+    await settle(scheduler)
+    await rm(dir, { recursive: true, force: true })
+  }
+})

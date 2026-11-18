@@ -27,13 +27,14 @@ export async function askRoom(store, runtime, input, signal) {
   if (captured !== undefined) await store.rememberRoom(room.id, captured)
   const roomMemory = await store.roomMemory(room.id)
   const teamMemory = room.teamId === '' ? undefined : await store.teamMemory(room.teamId)
+  const teamCard = room.teamId === '' ? undefined : store.getTeamCard(room.teamId)
   for (const botId of routed) {
     const bot = store.getBot(botId)
     try {
       const history = await store.history(room.id, 12)
       const botMemory = await store.botMemory(bot.id)
       const query = [message.text, ...history.slice(-3).map((item) => item.text)].join('\n')
-      const prompt = buildRoomPrompt(room, bot, history, { roomMemory, botMemory, teamMemory, query })
+      const prompt = buildRoomPrompt(room, bot, history, { roomMemory, botMemory, teamMemory, teamCard, query })
       const text = (await runtime.ask(bot, prompt, signal)).trim()
       if (text === '' || text === '[PASS]') {
         replies.push({ bot: bot.name, skipped: true })
@@ -82,7 +83,8 @@ export async function askDirect(store, runtime, input, signal) {
   const history = await store.directHistory(bot.id, 12)
   const botMemory = await store.botMemory(bot.id)
   const query = [input.text, ...history.slice(-3).map((item) => item.text)].join('\n')
-  const text = (await runtime.ask(bot, buildDirectPrompt(bot, history, { botMemory, query }, input.note), signal)).trim()
+  const teamCard = bot.teamId === '' ? undefined : store.getTeamCard(bot.teamId)
+  const text = (await runtime.ask(bot, buildDirectPrompt(bot, history, { botMemory, teamCard, query }, input.note), signal)).trim()
   if (text === '' || text === '[PASS]') return { posted, reply: undefined }
   const reply = await store.postDirect({
     botId: bot.id,
@@ -174,13 +176,15 @@ export async function assignTask(store, runtime, input, signal) {
     detail: input.instruction ?? task.brief,
     status: 'done',
   })
+  await store.incrementTaskWake(task.id).catch(() => undefined)
   await store.setPresence(bot.id, { status: 'thinking', taskId: task.id, action: '接收任务' })
   const botMemory = await store.botMemory(bot.id)
   const roomMemory = room === undefined ? undefined : await store.roomMemory(room.id)
   const teamMemory = task.teamId === '' ? undefined : await store.teamMemory(task.teamId)
+  const teamCard = task.teamId === '' ? undefined : store.getTeamCard(task.teamId)
   let replyText = ''
   try {
-    const prompt = buildTaskPrompt(bot, store.getTask(task.id), room, { roomMemory, botMemory, teamMemory, query: task.brief || task.title })
+    const prompt = buildTaskPrompt(bot, store.getTask(task.id), room, { roomMemory, botMemory, teamMemory, teamCard, query: task.brief || task.title })
     replyText = (await runtime.ask(bot, prompt, signal, {
       taskId: task.id,
       roomId: task.roomId,

@@ -82,6 +82,29 @@ function summarizeArgs(raw) {
   }
 }
 
+/** @returns {string} model-facing role skills, if any. */
+function botSkillSection(bot) {
+  const skills = Array.isArray(bot?.skills) ? bot.skills.filter(Boolean) : []
+  return skills.length === 0 ? '' : `\n\nRole skills: ${skills.join(' · ')}`
+}
+
+/** @returns {string} the model-facing Team Card context, if any. */
+function teamCardSection(card) {
+  if (card === undefined || card === null) return ''
+  const parts = []
+  if (card.name) parts.push(`Team: ${card.name}`)
+  if (card.leadBotId) parts.push(`Lead bot: ${card.leadBotId}`)
+  if (card.reviewerBotId) parts.push(`Independent reviewer: ${card.reviewerBotId}`)
+  if (card.publisherBotId) parts.push(`Publisher: ${card.publisherBotId}`)
+  if (card.rules) parts.push(`Team rules:\n${String(card.rules).slice(0, 2000)}`)
+  if (Array.isArray(card.skills) && card.skills.length > 0) parts.push(`Team skills: ${card.skills.join(', ')}`)
+  if (card.approvalPolicy !== undefined) {
+    const policy = card.approvalPolicy
+    parts.push(`Human approval: publish=${policy.publish}, merge=${policy.merge}, spend=${policy.spend}, external=${policy.external}`)
+  }
+  return parts.length === 0 ? '' : `\n\n${parts.join('\n')}`
+}
+
 /** @returns {string} the model-facing task block for a delegated task. */
 function taskSection(task) {
   if (task === undefined || task === null) return ''
@@ -116,9 +139,10 @@ export function buildRoomPrompt(room, bot, messages, memory, task) {
   const query = memory?.query ?? messages.at(-1)?.text ?? ''
   const memoryBlock = memory === undefined ? '' : formatMemory(memory.roomMemory, memory.botMemory, query, memory.teamMemory)
   const memorySection = memoryBlock === '' ? '' : `\n\n${memoryBlock}`
-  return `You are "${bot.name}", ${bot.role}, in the DSH group room "${room.name}".
+  const cardSection = teamCardSection(memory?.teamCard)
+  return `You are "${bot.name}", ${bot.role}, in the DSH group room "${room.name}".${cardSection}
 
-${bot.persona}${memorySection}${taskSection(task)}
+${bot.persona}${botSkillSection(bot)}${memorySection}${taskSection(task)}
 
 Recent room messages (oldest first):
 ${recent}
@@ -142,10 +166,11 @@ export function buildDirectPrompt(bot, messages, memory, note, task) {
   const query = memory?.query ?? messages.at(-1)?.text ?? ''
   const block = memory === undefined ? '' : formatMemory(undefined, memory.botMemory, query)
   const section = block === '' ? '' : `\n\n${block}`
+  const cardSection = teamCardSection(memory?.teamCard)
   const noteBlock = typeof note === 'string' && note.trim() !== '' ? `\n\n${note.trim()}` : ''
-  return `You are "${bot.name}", ${bot.role}, in a private DSH chat with the Lead (human).
+  return `You are "${bot.name}", ${bot.role}, in a private DSH chat with the Lead (human).${cardSection}
 
-${bot.persona}${noteBlock}${section}${taskSection(task)}
+${bot.persona}${botSkillSection(bot)}${noteBlock}${section}${taskSection(task)}
 
 Recent private messages (oldest first):
 ${recent}
@@ -162,10 +187,11 @@ export function buildTaskPrompt(bot, task, room, memory) {
   const query = task.brief || task.title
   const memoryBlock = memory === undefined ? '' : formatMemory(memory.roomMemory, memory.botMemory, query, memory.teamMemory)
   const memorySection = memoryBlock === '' ? '' : `\n\n${memoryBlock}`
+  const cardSection = teamCardSection(memory?.teamCard)
   const roomLine = room === undefined ? '' : `\nShared room: "${room.name}" (${room.id}). Post a concise result there when useful.`
-  return `You are "${bot.name}", ${bot.role}. You have been assigned a durable task by the Main Bot.${roomLine}
+  return `You are "${bot.name}", ${bot.role}. You have been assigned a durable task by the Main Bot.${roomLine}${cardSection}
 
-${bot.persona}${memorySection}${taskSection(task)}
+${bot.persona}${botSkillSection(bot)}${memorySection}${taskSection(task)}
 
 Work the task now. Use your tools to inspect files, run commands, search the web, write artifacts, and verify results. Rules:
 - Reply in Chinese unless the task is in another language.
@@ -235,6 +261,7 @@ ${command || '(none)'}
 
 Operating rules:
 - For non-trivial work, create a task first (team_task_create), then create or choose a sub-bot and dispatch it with team_task_dispatch. Give the task acceptance criteria and, whenever possible, a reviewer that is not the owner. Use team_task_assign only for a deliberately short synchronous task.
+- Use team_card_get before assigning team work. If a team has no reviewer, rules or skills, set them with team_card_update; new tasks inherit the Team Card reviewer automatically.
 - An owner cannot mark a task done. It must register an artifact and call team_task_submit_review; the reviewer calls team_task_review. Three failed review rounds block the task.
 - If the task belongs to a room, pass room_id when creating it; if it was created without one, bind it with team_task_update(room_id).
 - A sub-bot must report through team_task_report; when you need a status, call team_task_list or team_task_get.
@@ -416,6 +443,19 @@ export class BotRuntime {
     return this.active.get(botId) ?? ''
   }
 
+  /** Cancel one task Session without dropping unrelated room/private Sessions. */
+  cancelTaskSession(botId, taskId) {
+    const bot = this.store.getBot(botId)
+    const sessionId = bot.taskSessions?.[taskId] ?? ''
+    if (sessionId === '') return false
+    try {
+      this.ctx.sessionController.cancel({ sessionId })
+      return true
+    } catch {
+      return false
+    }
+  }
+
   async presence(bot, patch) {
     try {
       await this.store.setPresence(bot.id, patch)
@@ -502,6 +542,10 @@ export class BotRuntime {
           detail: compact(text),
           status: 'done',
         })
+      }
+      const usage = data.usage ?? data.message?.usage
+      if (taskId !== '' && usage !== undefined && usage !== null) {
+        await this.store.addTaskUsage(taskId, usage).catch(() => undefined)
       }
       await this.presence(bot, { status: 'thinking', action: '组织回复', taskId })
       return

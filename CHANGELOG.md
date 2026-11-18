@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.20.0 — 2026-11-18
+
+### Added
+
+- **Team Cards**: durable per-team lead/reviewer/publisher, shared rules, shared skills and human-approval policy (`team_card_get`, `team_card_update`, `GET/PATCH /team-cards`). `team_compose` creates one automatically.
+- **Layered context**: room, task and private prompts now receive the Team Card rules, shared skills, reviewer/publisher and approval policy; bot profiles gain role `skills`, included in every prompt.
+- **Token and wake accounting**: assistant-step usage is accumulated per task; the task drawer shows tokens and wake count.
+- **Team brief + heartbeat**: deterministic `team_brief` / `GET /brief` report; a token-free heartbeat records stale tasks and posts a daily Main Bot brief. Configurable with `heartbeatMs` and `dailyBriefHour`.
+- **Task cancellation**: `team_task_cancel` and `POST /tasks/:id/cancel` remove queued work or cancel the running task Session; panel adds an inline cancel button.
+
+### Changed
+
+- New tasks for a team automatically use the Team Card reviewer when none is passed.
+- `team_bot_create` / `team_bot_update` and the Bot drawer accept role skills.
+
 ## 0.19.0 — 2026-11-18
 
 ### Added

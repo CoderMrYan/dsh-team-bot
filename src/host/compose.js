@@ -104,5 +104,16 @@ export async function composeTeam(store, input = {}, runtime) {
     }))
   }
 
+  const reviewer = bots.find((bot) => bot.id !== chief.id && /审校|审核|review|qa|测试/i.test(`${bot.name} ${bot.role}`))
+  const publisher = bots.find((bot) => /发布|publisher|运营/i.test(`${bot.name} ${bot.role}`))
+  await store.upsertTeamCard(teamId, {
+    name: teamName,
+    leadBotId: chief.id,
+    reviewerBotId: reviewer?.id ?? '',
+    publisherBotId: publisher?.id ?? '',
+    rules: '',
+    skills: [],
+  })
+
   return { teamId, teamName, brief, bots, rooms }
 }

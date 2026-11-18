@@ -15,6 +15,7 @@ import { registerRoutes } from './routes.js'
 import { startWatchdog } from './watchdog.js'
 import { installToolApprovalBridge } from './tool-approvals.js'
 import { TaskScheduler } from './scheduler.js'
+import { startHeartbeat } from './brief.js'
 
 export const name = 'team-bot'
 export const inject = ['tools', 'sessionController', 'webServer', 'approval', 'agents']
@@ -25,6 +26,8 @@ export const Config = z.object({
   timeoutMs: z.number().default(900_000),
   mainTimeoutMs: z.number().default(1_800_000),
   maxConcurrentTasks: z.number().default(2),
+  heartbeatMs: z.number().default(7_200_000),
+  dailyBriefHour: z.number().default(8),
 })
 
 /**
@@ -59,6 +62,10 @@ export function apply(ctx, config = {}) {
   disposers.push(registerRoutes(ctx, store, runtime, approvalBridge, scheduler))
   disposers.push(approvalBridge.dispose)
   disposers.push(() => scheduler.close())
+  disposers.push(startHeartbeat(store, runtime, {
+    intervalMs: Number.isInteger(config.heartbeatMs) ? config.heartbeatMs : 7_200_000,
+    dailyHour: Number.isInteger(config.dailyBriefHour) ? config.dailyBriefHour : 8,
+  }))
   disposers.push(startWatchdog(store, runtime))
   void scheduler.resume().catch(() => undefined)
   ctx.effect(() => () => {

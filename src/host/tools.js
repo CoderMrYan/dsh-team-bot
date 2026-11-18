@@ -12,6 +12,7 @@ import { createAtom, createPersonaItem } from './memory.js'
 import { composeTeam } from './compose.js'
 import { commandState, ensureMain, notifyMain } from './main.js'
 import { buildReviewPrompt } from './runtime.js'
+import { buildTeamBrief } from './brief.js'
 import { listTemplates } from './templates.js'
 
 const ANY_OBJECT = { type: 'object', additionalProperties: true }
@@ -33,6 +34,14 @@ function assertCaller(store, exec, botId) {
   if (caller === undefined) return
   if (caller.id !== botId && caller.isMain !== true) {
     throw new Error('bot_id must identify the calling bot')
+  }
+}
+
+/** Throw when the caller is a sub-bot; Team Card edits belong to the orchestrator. */
+function assertMainCaller(store, exec) {
+  const caller = callerBot(store, exec)
+  if (caller !== undefined && caller.isMain !== true) {
+    throw new Error('only the Main Bot can change a Team Card')
   }
 }
 
@@ -70,6 +79,66 @@ export function createTools(store, runtime, scheduler) {
       output: jsonOutput(),
       async execute() {
         return await commandState(store)
+      },
+    }),
+
+    defineTool({
+      name: 'team_brief',
+      description: 'Return a deterministic team brief: task counts, items needing attention, stale running tasks, token usage and wakes. No model calls.',
+      parameters: {},
+      output: jsonOutput(),
+      async execute() {
+        return await buildTeamBrief(store)
+      },
+    }),
+
+    defineTool({
+      name: 'team_card_get',
+      description: 'Read one team card (lead, reviewer, publisher, rules, skills, approval policy), or list all cards.',
+      parameters: {
+        team_id: { type: 'string', description: 'Optional team id.' },
+      },
+      output: jsonOutput(),
+      async execute(args) {
+        if (typeof args.team_id === 'string' && args.team_id !== '') {
+          return { card: store.getTeamCard(args.team_id) }
+        }
+        return { cards: store.listTeamCards() }
+      },
+    }),
+
+    defineTool({
+      name: 'team_card_update',
+      description: 'Update a team card: rules, shared skills, lead/reviewer/publisher and human-approval policy. Only the Main Bot may change it.',
+      parameters: {
+        team_id: { type: 'string', required: true, description: 'Team id.' },
+        name: { type: 'string', description: 'Display name.' },
+        lead_bot_id: { type: 'string', description: 'Team lead bot id.' },
+        reviewer_bot_id: { type: 'string', description: 'Independent reviewer bot id.' },
+        publisher_bot_id: { type: 'string', description: 'Publisher bot id.' },
+        rules: { type: 'string', description: 'Project rules, style, forbidden changes and known pitfalls.' },
+        skills: { type: 'array', items: { type: 'string' }, description: 'Shared team skills or procedures.' },
+        approval_publish: { type: 'string', enum: ['human', 'auto'], description: 'Approval policy for publishing.' },
+        approval_merge: { type: 'string', enum: ['human', 'auto'], description: 'Approval policy for merges/deploys.' },
+        approval_spend: { type: 'string', enum: ['human', 'auto'], description: 'Approval policy for spending.' },
+        approval_external: { type: 'string', enum: ['human', 'auto'], description: 'Approval policy for external side effects.' },
+      },
+      output: jsonOutput(),
+      async execute(args, exec) {
+        assertMainCaller(store, exec)
+        const existing = store.getTeamCard(args.team_id)
+        const patch = { approvalPolicy: existing.approvalPolicy }
+        if (args.name !== undefined) patch.name = args.name
+        if (args.lead_bot_id !== undefined) patch.leadBotId = args.lead_bot_id
+        if (args.reviewer_bot_id !== undefined) patch.reviewerBotId = args.reviewer_bot_id
+        if (args.publisher_bot_id !== undefined) patch.publisherBotId = args.publisher_bot_id
+        if (args.rules !== undefined) patch.rules = args.rules
+        if (args.skills !== undefined) patch.skills = args.skills
+        if (args.approval_publish !== undefined) patch.approvalPolicy = { ...patch.approvalPolicy, publish: args.approval_publish }
+        if (args.approval_merge !== undefined) patch.approvalPolicy = { ...patch.approvalPolicy, merge: args.approval_merge }
+        if (args.approval_spend !== undefined) patch.approvalPolicy = { ...patch.approvalPolicy, spend: args.approval_spend }
+        if (args.approval_external !== undefined) patch.approvalPolicy = { ...patch.approvalPolicy, external: args.approval_external }
+        return await store.upsertTeamCard(args.team_id, patch)
       },
     }),
 
@@ -362,6 +431,25 @@ export function createTools(store, runtime, scheduler) {
     }),
 
     defineTool({
+      name: 'team_task_cancel',
+      description: 'Cancel a queued or running task. The scheduler removes it from the queue and cancels its task Session when possible.',
+      parameters: {
+        task_id: { type: 'string', required: true, description: 'Task id.' },
+        reason: { type: 'string', description: 'Why the task is being cancelled.' },
+      },
+      output: jsonOutput(),
+      async execute(args, exec) {
+        const task = store.getTask(args.task_id)
+        const caller = callerBot(store, exec)
+        if (caller !== undefined && caller.isMain !== true && caller.id !== task.ownerBotId) {
+          throw new Error('only the task owner or the Main Bot can cancel this task')
+        }
+        if (scheduler !== undefined) return await scheduler.cancel(task.id, args.reason)
+        return await store.cancelTask(task.id, args.reason)
+      },
+    }),
+
+    defineTool({
       name: 'team_task_delete',
       description: 'Delete one task record. Destructive: requires an approved approval_id; without one this creates a pending approval.',
       parameters: {
@@ -473,6 +561,7 @@ export function createTools(store, runtime, scheduler) {
         name: { type: 'string', required: true, description: 'Unique display name.' },
         role: { type: 'string', required: true, description: 'Short responsibility, such as researcher or reviewer.' },
         persona: { type: 'string', description: 'Standing instructions for this bot.' },
+        skills: { type: 'array', items: { type: 'string' }, description: 'Role skills or procedures this bot should follow.' },
         model: { type: 'string', description: 'Optional "provider/model" route, such as "openai/gpt-6.1-sol"; empty uses the deployment default.' },
         workspace: { type: 'string', description: 'Optional working directory for this bot.' },
       },
@@ -492,6 +581,7 @@ export function createTools(store, runtime, scheduler) {
         name: { type: 'string', description: 'New display name.' },
         role: { type: 'string', description: 'New short responsibility.' },
         persona: { type: 'string', description: 'New standing instructions.' },
+        skills: { type: 'array', items: { type: 'string' }, description: 'New role skills or procedures.' },
         model: { type: 'string', description: 'New "provider/model" route, or an empty string to use the deployment default.' },
         workspace: { type: 'string', description: 'New working directory; empty uses the team workspace.' },
       },
@@ -499,7 +589,7 @@ export function createTools(store, runtime, scheduler) {
       async execute(args) {
         await store.init()
         const patch = {}
-        for (const key of ['name', 'role', 'persona', 'model', 'workspace']) {
+        for (const key of ['name', 'role', 'persona', 'skills', 'model', 'workspace']) {
           if (args[key] !== undefined) patch[key] = args[key]
         }
         return await store.updateBot(args.bot_id, patch)

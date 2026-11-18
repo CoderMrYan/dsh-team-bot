@@ -4,7 +4,7 @@ Native multi-agent group chat for [DeepSeek Harness](https://github.com/deepseek
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-> Status: **0.19.0** — background task dispatch with a scheduler and global concurrency cap, independent task review with a reviewer distinct from the owner, review/rework/approval states, per-task isolated workspaces with validated artifacts, reviewer identity checks, right-sidebar docking (chat and console side by side), separate Main-Bot/sub-bot turn budgets with delegation pause, per-bot model routing (`provider/model`), per-task Sessions, `team_bot_reset`, persistent Main Bot command center, durable tasks/steps/artifacts, live per-bot tool activity and presence, asynchronous bot-to-bot handoff, human approvals for destructive actions, tool-stall detection and stop/cancel, shared local workspace, watchdog alerts, plus the existing rooms, memory and mobile UI. Install from GitHub; npm publish is optional and not done.
+> Status: **0.20.0** — Team Cards with layered role/team context, token/wake accounting and heartbeat briefs, task cancellation, background task dispatch with a scheduler and global concurrency cap, independent task review with a reviewer distinct from the owner, per-task isolated workspaces with validated artifacts, reviewer identity checks, right-sidebar docking, separate Main-Bot/sub-bot turn budgets, per-bot model routing, per-task Sessions, persistent Main Bot command center, durable tasks/steps/artifacts, live activity/presence, asynchronous handoff, human approvals for destructive actions, tool-stall detection and stop/cancel, watchdog alerts, plus rooms, memory and mobile UI. Install from GitHub; npm publish is optional and not done.
 
 ## Local workspace and safety boundary
 
@@ -92,7 +92,10 @@ Tools:
 | `team_task_review` | reviewer approves, requests changes, or rejects; changes wake the owner for rework |
 | `team_task_update` | update status, progress, owner, reviewer or acceptance criteria |
 | `team_task_artifact` | register a real deliverable file inside the task workspace |
+| `team_task_cancel` | cancel queued or running work and stop the task Session when needed |
 | `team_task_list` / `team_task_get` | read tasks, steps and artifacts |
+| `team_brief` | deterministic brief with task states, attention, token usage and wakes |
+| `team_card_get` / `team_card_update` | read/update a Team Card: lead, reviewer, publisher, rules, skills, approval policy |
 | `team_task_delete` | delete a task (human approval required) |
 | `team_compose` | create a whole team from one sentence, with bots, main room, and sub-rooms |
 | `team_template_list` | list the built-in team archetypes |
@@ -134,6 +137,15 @@ queued → running → in_review → done
 
 A profile's `model` is a `provider/model` route (for example `openai/gpt-6.1-sol`). After creating or resolving the bot's real Session, the runtime calls `sessionController.selectModel`, so room turns, private chats and workspace task Sessions all run on that route. Changing the profile re-applies on the next turn; clearing it returns the bot to the deployment default. Provider routes are configured in DSH **Settings → Models** (`llm-pi-ai` custom model APIs); an unconfigured route fails with `cannot use model` instead of silently falling back.
 
+### Team Cards and layered context
+
+- **Role context**: bot name/role/persona plus `skills`, injected on every turn.
+- **Team context**: Team Card `rules`, shared `skills`, lead/reviewer/publisher and publish/merge/spend/external approval policy.
+- **Task context**: ticket brief, acceptance criteria, isolated workspace and artifacts.
+- **Project context**: Team Card rules can hold style guides, forbidden changes and known pitfalls.
+
+`team_compose` creates a Team Card and recognises review/test roles as the reviewer. New tasks automatically use the card reviewer when none is passed. `team_brief` / `GET /brief` reports task states, attention items, stale running tasks, token usage and wake counts. The heartbeat only writes activity/notifications and never calls a model. Each task drawer shows tokens and wakes; `team_task_cancel` cancels queued or running work.
+
 ### Sessions and timeouts
 
 - **Room/private chats** share one long-lived Session per bot.
@@ -150,6 +162,8 @@ A profile's `model` is a `provider/model` route (for example `openai/gpt-6.1-sol
     timeoutMs: 900000
     mainTimeoutMs: 1800000
     maxConcurrentTasks: 2
+    heartbeatMs: 7200000
+    dailyBriefHour: 8
 ```
 
 ### How a turn works

@@ -4,7 +4,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-> 状态：**0.19.0** — 后台任务派发与调度器（全局并发上限）、独立任务验收（reviewer 不能是 owner）、验收/返工/人工批准状态、每任务独立工作目录与 artifact 校验、reviewer 身份校验、右侧栏停靠（聊天与控制台并排）、主/子 Bot 分开的回合预算与委派暂停、每个 Bot 独立模型路由（provider/model）、每个任务独立 Session、`team_bot_reset`、常驻主 Bot 指挥台、可追踪任务/步骤/产物、每个 Bot 的工具级实时活动与在线状态、Bot 间异步交接、破坏性操作人工审批、工具卡住检测与停止回合、共享本机 workspace、看门狗告警，以及原有的房间/记忆/手机 UI。从 GitHub 安装；npm 发布是可选项，暂未发布。
+> 状态：**0.20.0** — Team Card 与分层角色/团队上下文、token/唤醒统计与心跳简报、任务取消、后台任务调度与全局并发上限、独立任务验收（reviewer 不能是 owner）、每任务独立工作目录与 artifact 校验、reviewer 身份校验、右侧栏停靠、主/子 Bot 分开的回合预算、每个 Bot 独立模型路由、每个任务独立 Session、常驻主 Bot 指挥台、可追踪任务/步骤/产物、实时活动/在线状态、Bot 间异步交接、破坏性操作人工审批、工具卡住检测与停止回合、看门狗，以及房间/记忆/手机 UI。从 GitHub 安装；npm 发布是可选项，暂未发布。
 
 ## 本机 workspace 与安全边界
 
@@ -92,7 +92,10 @@ test/           store、routing、runtime、memory、client-bundle 测试
 | `team_task_review` | reviewer 通过/退回/拒绝；退回会自动唤醒 owner 返工 |
 | `team_task_update` | 更新状态、进度、owner、reviewer、验收标准 |
 | `team_task_artifact` | 登记任务目录内真实存在的交付文件 |
+| `team_task_cancel` | 取消排队或运行中的任务，必要时停止任务 Session |
 | `team_task_list` / `team_task_get` | 读取任务、步骤和产物 |
+| `team_brief` | 生成 token 用量、唤醒次数和需关注任务的确定性简报 |
+| `team_card_get` / `team_card_update` | 读取/更新 Team Card：lead、reviewer、publisher、规则、技能、审批策略 |
 | `team_task_delete` | 删除任务（需要人工审批） |
 | `team_compose` | 一句话创建整个团队：Bot、主群、分组 |
 | `team_template_list` | 列出内置团队模板 |
@@ -136,6 +139,15 @@ Bot 画像的 `model` 是 `provider/model`（例如 `openai/gpt-6.1-sol`、`qwen
 
 面板的 Bot 抽屉里可以直接填模型，输入框会带出 `/dsh-team-bot/api/models` 返回的当前模型目录；Bot 列表也会显示每个 Bot 的模型。
 
+### Team Card 与分层上下文
+
+- **角色上下文**：Bot 的 name/role/persona + `skills`，每次 turn 都注入；
+- **团队上下文**：Team Card 的 `rules`、共享 `skills`、lead/reviewer/publisher 和发布/合并/花钱/外发审批策略；
+- **任务上下文**：ticket 的 brief、验收标准、独立工作目录和 artifacts；
+- **项目上下文**：Team Card `rules` 可写文风、代码规范、不能改的文件和踩过的坑。
+
+`team_compose` 会自动创建 Team Card，并把审校/测试角色识别为 reviewer。创建任务时如果没有显式传 `reviewer_bot_id`，会自动使用 Team Card 的 reviewer。`team_brief` / `GET /brief` 返回 token 用量、唤醒次数、待关注任务和僵死 running 任务；心跳只写活动/通知，不调用模型。每个任务详情显示 token 用量和唤醒次数，`team_task_cancel` 可取消排队或运行中的任务。
+
 ### 会话与超时
 
 - **房间/私聊**共用一个长期 Session，适合连续讨论同一个项目。
@@ -152,6 +164,8 @@ Bot 画像的 `model` 是 `provider/model`（例如 `openai/gpt-6.1-sol`、`qwen
     timeoutMs: 900000          # 子 Bot 单轮预算
     mainTimeoutMs: 1800000     # 主 Bot 单轮预算
     maxConcurrentTasks: 2      # 后台任务并发上限
+    heartbeatMs: 7200000       # 心跳间隔，默认 2 小时
+    dailyBriefHour: 8          # 每日简报小时（本地时间）
 ```
 
 ### 一轮消息怎么走

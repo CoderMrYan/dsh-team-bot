@@ -160,6 +160,26 @@ test('a task submitted during the owner turn stays in_review', async () => {
   }
 })
 
+test('assistant usage is accumulated on the task', async () => {
+  const { store, runtime, dir } = await fresh()
+  try {
+    const bot = await store.createBot({ name: 'usage', role: 'work' })
+    const task = await store.createTask({ title: 'token task', ownerBotId: bot.id })
+    await runtime.handleEvent(bot, {
+      seq: 1,
+      type: 'assistant/message',
+      data: {
+        message: { content: [] },
+        usage: { inputTokens: 120, outputTokens: 30, totalTokens: 150 },
+      },
+    }, { taskId: task.id })
+    assert.equal(store.getTask(task.id).usage.totalTokens, 150)
+    assert.equal(store.getTask(task.id).usage.calls, 1)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
 test('artifact paths cannot escape the task workspace', async () => {
   const { store, runtime, dir } = await fresh()
   try {

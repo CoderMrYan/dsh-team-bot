@@ -57,7 +57,7 @@ export class TaskScheduler {
     if (this.has(task.id)) {
       return { task: this.store.getTask(task.id), queued: true, position: this.queue.findIndex((item) => item.taskId === task.id) + 1 }
     }
-    if (['done', 'in_review', 'needs_approval', 'failed'].includes(task.status)) {
+    if (['done', 'in_review', 'needs_approval', 'failed', 'cancelled'].includes(task.status)) {
       throw new Error(`task cannot be dispatched from status ${task.status}`)
     }
     if (task.status === 'running' && options.force !== true) {
@@ -79,6 +79,40 @@ export class TaskScheduler {
     const position = this.queue.length
     this.drain()
     return { task: this.store.getTask(task.id), queued: true, position }
+  }
+
+  /**
+   * Cancel one queued or running task.
+   * @param {string} taskId
+   * @param {string} [reason]
+   * @returns {Promise<object>} the cancelled task
+   */
+  async cancel(taskId, reason = '') {
+    await this.store.init()
+    const task = this.store.getTask(taskId)
+    const queueIndex = this.queue.findIndex((item) => item.taskId === taskId)
+    if (queueIndex >= 0) this.queue.splice(queueIndex, 1)
+    if (this.running.has(taskId)) {
+      try {
+        this.runtime.cancelTaskSession(task.ownerBotId, taskId)
+      } catch {
+        // The Session may already have settled.
+      }
+    }
+    const cancelled = await this.store.cancelTask(taskId, reason)
+    if (cancelled.ownerBotId !== '') {
+      await this.store.setPresence(cancelled.ownerBotId, { status: 'idle', taskId: '', action: '任务已取消' }).catch(() => undefined)
+    }
+    await this.store.recordActivity({
+      botId: cancelled.ownerBotId,
+      taskId: cancelled.id,
+      kind: 'cancel',
+      label: '任务已取消',
+      detail: String(reason),
+      status: 'error',
+    })
+    await notifyMain(this.store, `[已取消] ${cancelled.title}${reason ? `\n${reason}` : ''}`).catch(() => undefined)
+    return cancelled
   }
 
   /** Start queued work until the concurrency cap is reached. */

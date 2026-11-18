@@ -4,7 +4,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-> 状态：**0.24.0** — 项目（DSH workspace）作用域隔离、左侧入口并排打开、高风险任务执行前强制人工审批 + reviewer 只读工具限制、Team Card 分层角色/团队上下文、token/唤醒统计与心跳简报、任务取消、后台任务调度与全局并发上限、独立任务验收、每任务独立工作目录与 artifact 校验、reviewer 身份校验、右侧栏停靠、主/子 Bot 分开的回合预算、每个 Bot 独立模型路由、每个任务独立 Session、常驻主 Bot 指挥台、可追踪任务/步骤/产物、实时活动/在线状态、Bot 间异步交接、破坏性操作人工审批、工具卡住检测与停止回合、看门狗，以及房间/记忆/手机 UI。从 GitHub 安装；npm 发布是可选项，暂未发布。
+> 状态：**0.24.1** — 项目规则配置 UI、项目（DSH workspace）作用域隔离、左侧入口并排打开、高风险任务执行前强制人工审批 + reviewer 只读工具限制、Team Card 分层角色/团队上下文、token/唤醒统计与心跳简报、任务取消、后台任务调度与全局并发上限、独立任务验收、每任务独立工作目录与 artifact 校验、reviewer 身份校验、右侧栏停靠、主/子 Bot 分开的回合预算、每个 Bot 独立模型路由、每个任务独立 Session、常驻主 Bot 指挥台、可追踪任务/步骤/产物、实时活动/在线状态、Bot 间异步交接、破坏性操作人工审批、工具卡住检测与停止回合、看门狗，以及房间/记忆/手机 UI。从 GitHub 安装；npm 发布是可选项，暂未发布。
 
 ## 本机 workspace 与安全边界
 
@@ -154,6 +154,15 @@ Bot 画像的 `model` 是 `provider/model`（例如 `openai/gpt-6.1-sol`、`qwen
 - 任务目录为 `<workspace>/.dsh-team/tasks/<task-id>`；
 - 面板用当前 Session 的 `cwd` 作为项目路径，`/state`、`/main/ask`、建房、DM 都带 `project`；
 - 没有活动 Session（例如设置页）时是管理员全局视图。
+
+### 项目规则怎么配
+
+打开当前项目里的一个房间 → **记忆** → **项目记忆** → 在「项目规则」里填写并点「保存项目规则」。
+
+- 项目规则写入该项目的 `summary`，**每次 Bot/主 Bot 回合都会注入**；
+- 同一个 Tab 下方的输入框可以记“项目事实”，这些事实只对当前项目召回；
+- 项目规则只在当前 DSH workspace 生效，切换 workspace 后看不到也注入不到另一个项目；
+- 必须有一个活动 Session / 项目房间才能打开这个 Tab；设置页没有项目上下文。
 
 `team_compose` 会自动创建 Team Card，并把审校/测试角色识别为 reviewer。创建任务时如果没有显式传 `reviewer_bot_id`，会自动使用 Team Card 的 reviewer。`team_brief` / `GET /brief` 返回 token 用量、唤醒次数、待关注任务和僵死 running 任务；心跳只写活动/通知，不调用模型。每个任务详情显示 token 用量和唤醒次数，`team_task_cancel` 可取消排队或运行中的任务。
 

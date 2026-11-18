@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.24.1 — 2026-11-18
+
+### Added
+
+- **Project rules UI**: the room memory drawer now has a 「项目记忆」 tab with an always-injected 「项目规则」 editor and project-scoped facts. Rules are stored as the project summary and injected into every bot/Main Bot prompt for that workspace only.
+- `GET/POST/DELETE /project-memory`, `POST /project-memory/summary` and `POST /project-memory/review` for project-scoped memory.
+
 ## 0.24.0 — 2026-11-18
 
 ### Added

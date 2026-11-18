@@ -4,7 +4,7 @@ Native multi-agent group chat for [DeepSeek Harness](https://github.com/deepseek
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-> Status: **0.24.0** — DSH workspace project scoping, left-sidebar side-by-side entry, pre-execution human approval for high-risk tasks plus read-only reviewer sessions, Team Cards with layered role/team context, token/wake accounting and heartbeat briefs, task cancellation, background task dispatch with a scheduler and global concurrency cap, independent task review, per-task isolated workspaces with validated artifacts, reviewer identity checks, right-sidebar docking, separate Main-Bot/sub-bot turn budgets, per-bot model routing, per-task Sessions, persistent Main Bot command center, durable tasks/steps/artifacts, live activity/presence, asynchronous handoff, human approvals for destructive actions, tool-stall detection and stop/cancel, watchdog alerts, plus rooms, memory and mobile UI. Install from GitHub; npm publish is optional and not done.
+> Status: **0.24.1** — project rules UI, DSH workspace project scoping, left-sidebar side-by-side entry, pre-execution human approval for high-risk tasks plus read-only reviewer sessions, Team Cards with layered role/team context, token/wake accounting and heartbeat briefs, task cancellation, background task dispatch with a scheduler and global concurrency cap, independent task review, per-task isolated workspaces with validated artifacts, reviewer identity checks, right-sidebar docking, separate Main-Bot/sub-bot turn budgets, per-bot model routing, per-task Sessions, persistent Main Bot command center, durable tasks/steps/artifacts, live activity/presence, asynchronous handoff, human approvals for destructive actions, tool-stall detection and stop/cancel, watchdog alerts, plus rooms, memory and mobile UI. Install from GitHub; npm publish is optional and not done.
 
 ## Local workspace and safety boundary
 
@@ -152,6 +152,15 @@ A profile's `model` is a `provider/model` route (for example `openai/gpt-6.1-sol
 - Task workspaces are `<workspace>/.dsh-team/tasks/<task-id>`.
 - The panel uses the current Session `cwd` as the project path; `/state`, `/main/ask`, room creation and DMs send `project`.
 - Without an active Session (for example Settings) the console is an admin-wide view.
+
+### How to configure project rules
+
+Open a room in the current project → **Memory** → **Project memory** → fill 「项目规则」 and click 「保存项目规则」.
+
+- the rule is stored as the project summary and **injected into every bot/Main Bot turn** for this workspace;
+- the input below records project facts, recalled only for this project;
+- switching workspace hides and does not inject another project's rules;
+- a project room/active Session is required to open this tab; Settings has no project context.
 
 `team_compose` creates a Team Card and recognises review/test roles as the reviewer. New tasks automatically use the card reviewer when none is passed. `team_brief` / `GET /brief` reports task states, attention items, stale running tasks, token usage and wake counts. The heartbeat only writes activity/notifications and never calls a model. Each task drawer shows tokens and wakes; `team_task_cancel` cancels queued or running work.
 

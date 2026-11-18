@@ -503,6 +503,58 @@ export function registerRoutes(ctx, store, runtime, approvalBridge, scheduler) {
           })
           return
         }
+        if (parts[0] === 'project-memory' && req.method === 'GET') {
+          const project = url.searchParams.get('project') ?? ''
+          sendJson(res, 200, { project: await store.projectMemory(project) })
+          return
+        }
+        if (parts[0] === 'project-memory' && parts[1] === 'summary' && req.method === 'POST') {
+          const body = await readJson(req)
+          const project = typeof body.project === 'string' ? body.project : ''
+          if (project === '') {
+            sendJson(res, 400, { error: 'project is required' })
+            return
+          }
+          sendJson(res, 200, { project: await store.setProjectSummary(project, body.summary) })
+          return
+        }
+        if (parts[0] === 'project-memory' && parts[1] === 'review' && req.method === 'POST') {
+          const body = await readJson(req)
+          const project = typeof body.project === 'string' ? body.project : ''
+          if (project === '' || typeof body.atom_id !== 'string') {
+            sendJson(res, 400, { error: 'project and atom_id are required' })
+            return
+          }
+          const review = body.action === 'accept' ? 'accepted' : body.action === 'reject' ? 'rejected' : 'pending'
+          sendJson(res, 200, { project: await store.reviewProject(project, body.atom_id, review) })
+          return
+        }
+        if (parts[0] === 'project-memory' && req.method === 'POST') {
+          const body = await readJson(req)
+          const project = typeof body.project === 'string' ? body.project : ''
+          if (project === '') {
+            sendJson(res, 400, { error: 'project is required' })
+            return
+          }
+          const atom = createAtom({
+            text: typeof body.text === 'string' ? body.text : '',
+            key: typeof body.key === 'string' ? body.key : undefined,
+            importance: typeof body.importance === 'number' ? body.importance : undefined,
+            source: 'api',
+          })
+          sendJson(res, 200, await store.rememberProject(project, atom))
+          return
+        }
+        if (parts[0] === 'project-memory' && req.method === 'DELETE') {
+          const project = url.searchParams.get('project') ?? ''
+          const atomId = url.searchParams.get('atom') ?? ''
+          if (project === '' || atomId === '') {
+            sendJson(res, 400, { error: 'project and atom are required' })
+            return
+          }
+          sendJson(res, 200, { project: await store.forgetProject(project, atomId) })
+          return
+        }
         if (parts[0] === 'brief' && req.method === 'GET') {
           sendJson(res, 200, await buildTeamBrief(store, { projectId: url.searchParams.get('project') ?? '' }))
           return

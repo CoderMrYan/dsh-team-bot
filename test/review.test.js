@@ -190,6 +190,68 @@ test('reviewer allowlist keeps read and review tools, removes writers', () => {
   assert.equal(allow.includes('team_task_artifact'), false)
 })
 
+test('reviewer turn applies and removes the read-only tool restriction', async () => {
+  const { store, dir } = await fresh()
+  try {
+    const bot = await store.createBot({ name: 'reviewer-run', role: 'review' })
+    const task = await store.createTask({ title: 'review run', ownerBotId: bot.id })
+    let prompted = false
+    let allowed
+    let disposed = false
+    const ctx = {
+      sessionController: {
+        async create() { return { sessionId: 'session-reviewer' } },
+        async resolveAgent() {
+          return {
+            agent: {
+              ctx: {
+                tools: {
+                  restrict(filter) {
+                    allowed = filter
+                    return () => { disposed = true }
+                  },
+                },
+              },
+            },
+          }
+        },
+        async inspect() {
+          return prompted
+            ? { events: [{ seq: 1, type: 'turn/end', data: { reason: { kind: 'completed' } } }] }
+            : { events: [] }
+        },
+        async prompt() { prompted = true },
+        async selectModel() {},
+        cancel() {},
+      },
+      tools: {
+        schemas: () => [
+          { name: 'read' },
+          { name: 'write' },
+          { name: 'edit' },
+          { name: 'team_task_get' },
+          { name: 'team_task_review' },
+        ],
+      },
+    }
+    const runtime = new BotRuntime(ctx, store, { workspaceRoot: path.join(dir, 'workspace'), pollMs: 1 })
+    await runtime.runTurn(bot, 'review this', undefined, {
+      taskId: task.id,
+      taskSession: true,
+      workspace: await runtime.ensureTaskWorkspace(task.id),
+      readOnly: true,
+    })
+    assert.ok(allowed)
+    assert.equal(allowed.allow.includes('read'), true)
+    assert.equal(allowed.allow.includes('team_task_review'), true)
+    assert.equal(allowed.allow.includes('write'), false)
+    assert.equal(allowed.allow.includes('edit'), false)
+    assert.equal(disposed, true)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
 test('artifact paths cannot escape the task workspace', async () => {
   const { store, runtime, dir } = await fresh()
   try {

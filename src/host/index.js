@@ -14,6 +14,7 @@ import { createTools } from './tools.js'
 import { registerRoutes } from './routes.js'
 import { startWatchdog } from './watchdog.js'
 import { installToolApprovalBridge } from './tool-approvals.js'
+import { TaskScheduler } from './scheduler.js'
 
 export const name = 'team-bot'
 export const inject = ['tools', 'sessionController', 'webServer', 'approval', 'agents']
@@ -23,6 +24,7 @@ export const Config = z.object({
   workspaceRoot: z.string().default(''),
   timeoutMs: z.number().default(900_000),
   mainTimeoutMs: z.number().default(1_800_000),
+  maxConcurrentTasks: z.number().default(2),
 })
 
 /**
@@ -47,12 +49,18 @@ export function apply(ctx, config = {}) {
     : 1_800_000
   const store = new TeamStore(dataDir)
   const runtime = new BotRuntime(ctx, store, { workspaceRoot, timeoutMs, mainTimeoutMs })
+  const maxConcurrentTasks = Number.isInteger(config.maxConcurrentTasks) && config.maxConcurrentTasks > 0
+    ? config.maxConcurrentTasks
+    : 2
+  const scheduler = new TaskScheduler(store, runtime, { maxConcurrent: maxConcurrentTasks })
   const approvalBridge = installToolApprovalBridge(ctx, store)
   const disposers = []
-  for (const definition of createTools(store, runtime)) disposers.push(ctx.tools.register(definition))
-  disposers.push(registerRoutes(ctx, store, runtime, approvalBridge))
+  for (const definition of createTools(store, runtime, scheduler)) disposers.push(ctx.tools.register(definition))
+  disposers.push(registerRoutes(ctx, store, runtime, approvalBridge, scheduler))
   disposers.push(approvalBridge.dispose)
+  disposers.push(() => scheduler.close())
   disposers.push(startWatchdog(store, runtime))
+  void scheduler.resume().catch(() => undefined)
   ctx.effect(() => () => {
     for (const dispose of disposers.reverse()) dispose()
   }, 'team-bot.tools()')

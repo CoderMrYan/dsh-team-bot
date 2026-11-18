@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.19.0 — 2026-11-18
+
+### Added
+
+- **Background task dispatch**: `team_task_dispatch` enqueues a durable task and returns immediately, so the Main Bot can keep coordinating while a worker turn runs.
+- **Task scheduler** with global `maxConcurrentTasks` (default 2): extra tasks stay `queued`, start automatically when a slot frees, and are re-enqueued after a plugin reload.
+- **Queue observability**: queue entry steps, waiting presence, background-finished activity and a Main Bot notification.
+- `POST /tasks/:id/dispatch` for the same behavior from the panel/API.
+
+### Changed
+
+- `team_handoff`, reviewer-driven rework and the human-reject path now go through the scheduler instead of starting unbounded background turns.
+- Main Bot operating rules use `team_task_dispatch` for normal work; `team_task_assign` remains the deliberately synchronous path.
+
 ## 0.18.1 — 2026-11-18
 
 ### Fixed

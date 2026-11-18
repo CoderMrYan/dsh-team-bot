@@ -4,7 +4,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-> 状态：**0.18.1** — 独立任务验收（reviewer 不能是 owner）、验收/返工/人工批准状态、每任务独立工作目录与 artifact 校验、reviewer 身份校验、右侧栏停靠（聊天与控制台并排）、主/子 Bot 分开的回合预算与委派暂停、每个 Bot 独立模型路由（provider/model）、每个任务独立 Session、`team_bot_reset`、常驻主 Bot 指挥台、可追踪任务/步骤/产物、每个 Bot 的工具级实时活动与在线状态、Bot 间异步交接、破坏性操作人工审批、工具卡住检测与停止回合、共享本机 workspace、看门狗告警，以及原有的房间/记忆/手机 UI。从 GitHub 安装；npm 发布是可选项，暂未发布。
+> 状态：**0.19.0** — 后台任务派发与调度器（全局并发上限）、独立任务验收（reviewer 不能是 owner）、验收/返工/人工批准状态、每任务独立工作目录与 artifact 校验、reviewer 身份校验、右侧栏停靠（聊天与控制台并排）、主/子 Bot 分开的回合预算与委派暂停、每个 Bot 独立模型路由（provider/model）、每个任务独立 Session、`team_bot_reset`、常驻主 Bot 指挥台、可追踪任务/步骤/产物、每个 Bot 的工具级实时活动与在线状态、Bot 间异步交接、破坏性操作人工审批、工具卡住检测与停止回合、共享本机 workspace、看门狗告警，以及原有的房间/记忆/手机 UI。从 GitHub 安装；npm 发布是可选项，暂未发布。
 
 ## 本机 workspace 与安全边界
 
@@ -84,7 +84,8 @@ test/           store、routing、runtime、memory、client-bundle 测试
 | `team_bot_reset` | 清空某个 Bot 的房间 Session 和全部任务 Session（画像/模型/workspace 不动） |
 | `team_bot_list` | 列出画像及绑定的 Session id |
 | `team_task_create` | 创建任务，可带验收标准、独立 reviewer、人工审批标记 |
-| `team_task_assign` | 派发任务；自动创建该任务的独立工作目录并在独立 Session 中执行 |
+| `team_task_assign` | 同步派发任务；短任务用 |
+| `team_task_dispatch` | 后台派发任务并立即返回；受全局并发上限约束，满员自动排队 |
 | `team_task_handoff` | 把任务异步交接给另一个 Bot |
 | `team_task_report` | 上报进行中/阻塞/失败；不能用来直接完成 |
 | `team_task_submit_review` | owner 注册 artifact 后提交独立验收 |
@@ -138,17 +139,19 @@ Bot 画像的 `model` 是 `provider/model`（例如 `openai/gpt-6.1-sol`、`qwen
 ### 会话与超时
 
 - **房间/私聊**共用一个长期 Session，适合连续讨论同一个项目。
-- **每个任务一个 Session**：`team_task_assign`、`team_handoff`、面板任务都按 `taskId` 记住自己的 Session。第二次审查是另一个任务，会自动从干净上下文开始，不会锚在上一轮的结论上；同一个任务重跑才复用原 Session。每个 Bot 最多保留 30 个任务 Session。
+- **每个任务一个 Session**：`team_task_assign`、`team_task_dispatch`、`team_handoff`、面板任务都按 `taskId` 记住自己的 Session。第二次审查是另一个任务，会自动从干净上下文开始，不会锚在上一轮的结论上；同一个任务重跑才复用原 Session。每个 Bot 最多保留 30 个任务 Session。
+- **后台队列**：`team_task_dispatch` 立即返回，任务进入 `queued`，由调度器在 `maxConcurrentTasks`（默认 2）以内自动启动；插件重载后 `queued` 任务会自动恢复。主 Bot 不再被长任务占住。
 - **`team_bot_reset`**：需要彻底重来时清空该 Bot 的房间和任务 Session，画像、模型、workspace 不变。
 - **主 Bot 与子 Bot 分开配置**：`timeoutMs`（默认 `900000`）管子 Bot，`mainTimeoutMs`（默认 `1800000`）管主 Bot。
-- **委派暂停**：主 Bot 调用 `team_task_assign`、`team_handoff`、`team_room_ask`、`team_dm_ask`、`team_chief_desk`、`team_compose` 期间，自己的计时器会暂停，子 Bot 返回后再续上。所以 20 分钟的审查不会被主 Bot 的 15 分钟预算掐断，你也不用判断任务长短。
+- **委派暂停**：主 Bot 调用 `team_task_assign`、`team_handoff`、`team_room_ask`、`team_dm_ask`、`team_chief_desk`、`team_compose` 期间，自己的计时器会暂停，子 Bot 返回后再续上。`team_task_dispatch` 不会暂停，因为它立即返回。
 - 面板的 HTTP 请求按 `max(timeoutMs, mainTimeoutMs) + 60s` 等待。
 
 ```yaml
 - id: team-bot
   config:
-    timeoutMs: 900000        # 子 Bot 单轮预算
-    mainTimeoutMs: 1800000   # 主 Bot 单轮预算
+    timeoutMs: 900000          # 子 Bot 单轮预算
+    mainTimeoutMs: 1800000     # 主 Bot 单轮预算
+    maxConcurrentTasks: 2      # 后台任务并发上限
 ```
 
 ### 一轮消息怎么走

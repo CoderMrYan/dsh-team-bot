@@ -49,7 +49,7 @@ function jsonOutput(schema = ANY_OBJECT) {
  * @param {import('./runtime.js').BotRuntime} runtime
  * @returns {object[]} tool definitions ready for `ctx.tools.register()`.
  */
-export function createTools(store, runtime) {
+export function createTools(store, runtime, scheduler) {
   return [
     defineTool({
       name: 'team_main_ensure',
@@ -124,6 +124,28 @@ export function createTools(store, runtime) {
     }),
 
     defineTool({
+      name: 'team_task_dispatch',
+      description: 'Dispatch a durable task to a bot in the background and return immediately. The scheduler enforces the concurrency cap; queued tasks start automatically when a slot is free. Use this for long-running work so the Main Bot stays responsive.',
+      parameters: {
+        task_id: { type: 'string', required: true, description: 'Task id.' },
+        bot_id: { type: 'string', required: true, description: 'Owner bot id.' },
+        instruction: { type: 'string', description: 'Optional extra instruction for this assignment.' },
+      },
+      output: jsonOutput(),
+      timeoutMs: 30_000,
+      async execute(args) {
+        if (scheduler !== undefined) {
+          return await scheduler.schedule(args.task_id, args.bot_id, args.instruction)
+        }
+        return await assignTask(store, runtime, {
+          taskId: args.task_id,
+          botId: args.bot_id,
+          instruction: args.instruction,
+        })
+      },
+    }),
+
+    defineTool({
       name: 'team_handoff',
       description: 'Hand a durable task to another bot asynchronously. The target bot is woken with the task contract; the current bot returns immediately. The sender must be the current owner or the Main Bot.',
       parameters: {
@@ -140,7 +162,7 @@ export function createTools(store, runtime) {
           fromBotId: args.bot_id,
           toBotId: args.to_bot_id,
           note: args.note,
-        })
+        }, scheduler)
       },
     }),
 
@@ -316,11 +338,14 @@ export function createTools(store, runtime) {
         await store.setPresence(args.reviewer_bot_id, { status: 'idle', taskId: '', action: '验收完成' }).catch(() => undefined)
         if (args.verdict === 'changes' && reviewed.status === 'running' && reviewed.ownerBotId !== '') {
           await store.setPresence(reviewed.ownerBotId, { status: 'idle', taskId: '', action: '等待返工' }).catch(() => undefined)
-          void assignTask(store, runtime, {
-            taskId: reviewed.id,
-            botId: reviewed.ownerBotId,
-            instruction: `验收退回：${args.notes ?? ''}`,
-          }).catch(async (error) => {
+          const rework = scheduler !== undefined
+            ? scheduler.schedule(reviewed.id, reviewed.ownerBotId, `验收退回：${args.notes ?? ''}`, { force: true })
+            : assignTask(store, runtime, {
+                taskId: reviewed.id,
+                botId: reviewed.ownerBotId,
+                instruction: `验收退回：${args.notes ?? ''}`,
+              })
+          void rework.catch(async (error) => {
             await store.recordActivity({
               botId: reviewed.ownerBotId,
               taskId: reviewed.id,

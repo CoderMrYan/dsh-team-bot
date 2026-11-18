@@ -45,7 +45,7 @@ async function readJson(req, limit = 1_000_000) {
  * @param {import('./runtime.js').BotRuntime} runtime
  * @returns {() => void} route disposer
  */
-export function registerRoutes(ctx, store, runtime, approvalBridge) {
+export function registerRoutes(ctx, store, runtime, approvalBridge, scheduler) {
   return ctx.webServer.register({
     kind: 'prefix',
     path: PREFIX,
@@ -69,6 +69,7 @@ export function registerRoutes(ctx, store, runtime, approvalBridge) {
             activity: store.listActivity({ limit: 80 }),
             approvals: store.listApprovals({ status: 'pending' }),
             approvalDebug: approvalBridge?.stats?.(),
+            scheduler: scheduler?.status?.(),
             main,
           })
           return
@@ -291,11 +292,14 @@ export function registerRoutes(ctx, store, runtime, approvalBridge) {
             status: body.verdict === 'approve' ? 'done' : 'error',
           })
           if (body.verdict === 'changes' && reviewed.status === 'running' && reviewed.ownerBotId !== '') {
-            void assignTask(store, runtime, {
-              taskId: reviewed.id,
-              botId: reviewed.ownerBotId,
-              instruction: `验收退回：${body.notes ?? ''}`,
-            }).catch(() => undefined)
+            const rework = scheduler !== undefined
+              ? scheduler.schedule(reviewed.id, reviewed.ownerBotId, `验收退回：${body.notes ?? ''}`, { force: true })
+              : assignTask(store, runtime, {
+                  taskId: reviewed.id,
+                  botId: reviewed.ownerBotId,
+                  instruction: `验收退回：${body.notes ?? ''}`,
+                })
+            void rework.catch(() => undefined)
           }
           sendJson(res, 200, reviewed)
           return
@@ -327,11 +331,14 @@ export function registerRoutes(ctx, store, runtime, approvalBridge) {
             status: 'error',
           })
           if (task.status === 'running' && task.ownerBotId !== '') {
-            void assignTask(store, runtime, {
-              taskId: task.id,
-              botId: task.ownerBotId,
-              instruction: `人工拒绝：${body.notes ?? ''}`,
-            }).catch(() => undefined)
+            const rework = scheduler !== undefined
+              ? scheduler.schedule(task.id, task.ownerBotId, `人工拒绝：${body.notes ?? ''}`, { force: true })
+              : assignTask(store, runtime, {
+                  taskId: task.id,
+                  botId: task.ownerBotId,
+                  instruction: `人工拒绝：${body.notes ?? ''}`,
+                })
+            void rework.catch(() => undefined)
           }
           sendJson(res, 200, task)
           return
@@ -347,6 +354,19 @@ export function registerRoutes(ctx, store, runtime, approvalBridge) {
             fromBotId: body.bot_id,
             toBotId: body.to_bot_id,
             note: body.note,
+          }, scheduler))
+          return
+        }
+        if (parts[0] === 'tasks' && parts[1] !== undefined && parts[2] === 'dispatch' && req.method === 'POST') {
+          const body = await readJson(req)
+          if (scheduler !== undefined) {
+            sendJson(res, 200, await scheduler.schedule(parts[1], body.bot_id, body.instruction))
+            return
+          }
+          sendJson(res, 200, await assignTask(store, runtime, {
+            taskId: parts[1],
+            botId: body.bot_id,
+            instruction: body.instruction,
           }))
           return
         }

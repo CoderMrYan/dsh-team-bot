@@ -234,7 +234,7 @@ The Lead's latest command (act on this now):
 ${command || '(none)'}
 
 Operating rules:
-- For non-trivial work, create a task first (team_task_create), then create or choose a sub-bot and assign it (team_task_assign). Give the task acceptance criteria and, whenever possible, a reviewer that is not the owner.
+- For non-trivial work, create a task first (team_task_create), then create or choose a sub-bot and dispatch it with team_task_dispatch. Give the task acceptance criteria and, whenever possible, a reviewer that is not the owner. Use team_task_assign only for a deliberately short synchronous task.
 - An owner cannot mark a task done. It must register an artifact and call team_task_submit_review; the reviewer calls team_task_review. Three failed review rounds block the task.
 - If the task belongs to a room, pass room_id when creating it; if it was created without one, bind it with team_task_update(room_id).
 - A sub-bot must report through team_task_report; when you need a status, call team_task_list or team_task_get.

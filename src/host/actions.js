@@ -98,7 +98,7 @@ export async function askDirect(store, runtime, input, signal) {
  * returns immediately; the target's turn and task steps are recorded by the
  * normal runtime path.
  */
-export async function handoffTask(store, runtime, input) {
+export async function handoffTask(store, runtime, input, scheduler) {
   await store.init()
   const task = store.getTask(input.taskId)
   const from = store.getBot(input.fromBotId)
@@ -127,11 +127,14 @@ export async function handoffTask(store, runtime, input) {
     detail: String(input.note ?? ''),
     status: 'done',
   })
-  void assignTask(store, runtime, {
-    taskId: task.id,
-    botId: to.id,
-    instruction: input.note,
-  }).catch(async (error) => {
+  const dispatch = scheduler !== undefined
+    ? scheduler.schedule(task.id, to.id, input.note)
+    : assignTask(store, runtime, {
+        taskId: task.id,
+        botId: to.id,
+        instruction: input.note,
+      })
+  void dispatch.catch(async (error) => {
     await store.recordActivity({
       botId: to.id,
       taskId: task.id,

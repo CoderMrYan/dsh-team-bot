@@ -4,7 +4,7 @@ Native multi-agent group chat for [DeepSeek Harness](https://github.com/deepseek
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-> Status: **0.18.1** — independent task review with a reviewer distinct from the owner, review/rework/approval states, per-task isolated workspaces with validated artifacts, reviewer identity checks, right-sidebar docking (chat and console side by side), separate Main-Bot/sub-bot turn budgets with delegation pause, per-bot model routing (`provider/model`), per-task Sessions, `team_bot_reset`, persistent Main Bot command center, durable tasks/steps/artifacts, live per-bot tool activity and presence, asynchronous bot-to-bot handoff, human approvals for destructive actions, tool-stall detection and stop/cancel, shared local workspace, watchdog alerts, plus the existing rooms, memory and mobile UI. Install from GitHub; npm publish is optional and not done.
+> Status: **0.19.0** — background task dispatch with a scheduler and global concurrency cap, independent task review with a reviewer distinct from the owner, review/rework/approval states, per-task isolated workspaces with validated artifacts, reviewer identity checks, right-sidebar docking (chat and console side by side), separate Main-Bot/sub-bot turn budgets with delegation pause, per-bot model routing (`provider/model`), per-task Sessions, `team_bot_reset`, persistent Main Bot command center, durable tasks/steps/artifacts, live per-bot tool activity and presence, asynchronous bot-to-bot handoff, human approvals for destructive actions, tool-stall detection and stop/cancel, shared local workspace, watchdog alerts, plus the existing rooms, memory and mobile UI. Install from GitHub; npm publish is optional and not done.
 
 ## Local workspace and safety boundary
 
@@ -84,7 +84,8 @@ Tools:
 | `team_bot_reset` | forget a bot's room Session and all task Sessions (profile, model and workspace stay) |
 | `team_bot_list` | list profiles and their bound Session ids |
 | `team_task_create` | create a task with acceptance criteria, an independent reviewer and an optional human-approval flag |
-| `team_task_assign` | assign a task; creates its isolated workspace and runs it in a task Session |
+| `team_task_assign` | assign a task synchronously; use for deliberately short work |
+| `team_task_dispatch` | dispatch a task in the background and return immediately; queued behind the global concurrency cap |
 | `team_task_handoff` | hand a task to another bot asynchronously |
 | `team_task_report` | report progress/blocker; cannot be used to mark the task done |
 | `team_task_submit_review` | register artifacts and submit the deliverable for independent review |
@@ -136,11 +137,20 @@ A profile's `model` is a `provider/model` route (for example `openai/gpt-6.1-sol
 ### Sessions and timeouts
 
 - **Room/private chats** share one long-lived Session per bot.
-- **One Session per task**: every `team_task_assign`, `team_handoff` and panel task remembers its own Session under `bot.taskSessions[taskId]`. A second review task starts from a clean context; only a re-run of the same task reuses its Session. Up to 30 task Sessions are kept per bot.
+- **One Session per task**: every `team_task_assign`, `team_task_dispatch`, `team_handoff` and panel task remembers its own Session under `bot.taskSessions[taskId]`. A second review task starts from a clean context; only a re-run of the same task reuses its Session. Up to 30 task Sessions are kept per bot.
+- **Background queue**: `team_task_dispatch` returns immediately, marks the task `queued`, and the scheduler starts it within `maxConcurrentTasks` (default 2). Queued tasks are recovered after a plugin reload, so the Main Bot is not held by a long task.
 - **`team_bot_reset`** clears a bot's room and task Sessions without touching its profile.
 - **Separate budgets**: `timeoutMs` (default `900000`) for sub-bots, `mainTimeoutMs` (default `1800000`) for the Main Bot, both configured under `dsh-team-bot` in the profile's `cordis.patch.yml`.
-- **Delegation pause**: while the Main Bot is inside `team_task_assign`, `team_handoff`, `team_room_ask`, `team_dm_ask`, `team_chief_desk` or `team_compose`, its timer pauses and re-arms when the child returns. A 20-minute review is not killed by the parent's 15-minute budget.
+- **Delegation pause**: while the Main Bot is inside `team_task_assign`, `team_handoff`, `team_room_ask`, `team_dm_ask`, `team_chief_desk` or `team_compose`, its timer pauses and re-arms when the child returns. `team_task_dispatch` does not pause because it returns immediately.
 - Panel HTTP asks wait `max(timeoutMs, mainTimeoutMs) + 60s`.
+
+```yaml
+- id: team-bot
+  config:
+    timeoutMs: 900000
+    mainTimeoutMs: 1800000
+    maxConcurrentTasks: 2
+```
 
 ### How a turn works
 

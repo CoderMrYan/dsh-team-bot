@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.23.1 — 2026-11-18
+
+### Fixed
+
+- The left-sidebar launcher now retries opening the right tab after restoring the conversation (up to three times), so a first-frame layout race does not leave the conversation without the team pane.
+
 ## 0.23.0 — 2026-11-18
 
 ### Fixed

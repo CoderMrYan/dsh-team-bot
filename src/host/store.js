@@ -16,7 +16,8 @@ import { createAvatar } from './avatars.js'
 
 const STATE_VERSION = 3
 const REPLY_MODES = new Set(['mention', 'admin', 'auto'])
-const TASK_STATUSES = new Set(['queued', 'running', 'waiting', 'blocked', 'done', 'failed'])
+const TASK_STATUSES = new Set(['queued', 'running', 'waiting', 'in_review', 'needs_approval', 'blocked', 'done', 'failed'])
+const REVIEW_STATUSES = new Set(['none', 'pending', 'changes_requested', 'approved', 'rejected'])
 const PRESENCE_STATUSES = new Set(['idle', 'thinking', 'tool', 'waiting', 'blocked', 'offline'])
 const APPROVAL_STATUSES = new Set(['pending', 'approved', 'rejected', 'executed'])
 
@@ -39,6 +40,20 @@ export function normalizePolicy(input = {}) {
     hopLimit: clampInt(input.hopLimit, 0, 5, 2),
     allowPass: input.allowPass !== false,
   }
+}
+
+/**
+ * Validate one bot model setting. The value is either empty (the Session keeps
+ * its default model) or a `provider/model` route reference.
+ * @param {unknown} value - the raw setting.
+ * @returns {string} the trimmed setting.
+ */
+export function normalizeBotModel(value) {
+  const model = String(value ?? '').trim()
+  if (model !== '' && !model.includes('/')) {
+    throw new Error('bot model must be "provider/model"')
+  }
+  return model
 }
 
 /** @returns {object} an empty durable state. */
@@ -167,7 +182,7 @@ export class TeamStore {
       role: String(input.role ?? '').trim(),
       title: String(input.title ?? '').trim(),
       persona: String(input.persona ?? '').trim(),
-      model: String(input.model ?? '').trim(),
+      model: normalizeBotModel(input.model),
       workspace: String(input.workspace ?? '').trim(),
       teamId: String(input.teamId ?? ''),
       teamName: String(input.teamName ?? ''),
@@ -218,6 +233,18 @@ export class TeamStore {
       progress: Number.isFinite(task.progress) ? Math.max(0, Math.min(100, task.progress)) : 0,
       steps: Array.isArray(task.steps) ? task.steps : [],
       artifacts: Array.isArray(task.artifacts) ? task.artifacts : [],
+      acceptanceCriteria: String(task.acceptanceCriteria ?? ''),
+      reviewerBotId: String(task.reviewerBotId ?? ''),
+      reviewStatus: REVIEW_STATUSES.has(task.reviewStatus) ? task.reviewStatus : 'none',
+      reviewAttempts: Number.isInteger(task.reviewAttempts) ? Math.max(0, task.reviewAttempts) : 0,
+      reviewNotes: String(task.reviewNotes ?? ''),
+      reviewedBy: String(task.reviewedBy ?? ''),
+      submittedAt: String(task.submittedAt ?? ''),
+      reviewedAt: String(task.reviewedAt ?? ''),
+      needsApproval: task.needsApproval === true,
+      approvalStatus: String(task.approvalStatus ?? 'none'),
+      approvedBy: String(task.approvedBy ?? ''),
+      workspace: String(task.workspace ?? ''),
       currentStep: String(task.currentStep ?? ''),
       ownerBotId: String(task.ownerBotId ?? ''),
       roomId: String(task.roomId ?? ''),
@@ -234,11 +261,19 @@ export class TeamStore {
     if (title === '') throw new Error('task title is required')
     const ownerBotId = String(input.ownerBotId ?? '')
     if (ownerBotId !== '') this.getBot(ownerBotId)
+    const reviewerBotId = String(input.reviewerBotId ?? '')
+    if (reviewerBotId !== '') {
+      this.getBot(reviewerBotId)
+      if (reviewerBotId === ownerBotId) throw new Error('reviewer must be a different bot than the owner')
+    }
     const task = this.normalizeTask({
       id: newId('task'),
       title,
       brief: String(input.brief ?? '').trim(),
+      acceptanceCriteria: String(input.acceptanceCriteria ?? '').trim(),
       ownerBotId,
+      reviewerBotId,
+      needsApproval: input.needsApproval === true,
       roomId: String(input.roomId ?? ''),
       teamId: String(input.teamId ?? ''),
       parentId: String(input.parentId ?? ''),
@@ -303,11 +338,38 @@ export class TeamStore {
     if (patch.ownerBotId !== undefined) {
       const owner = String(patch.ownerBotId)
       if (owner !== '') this.getBot(owner)
+      if (owner !== '' && task.reviewerBotId !== '' && owner === task.reviewerBotId) {
+        throw new Error('reviewer must be a different bot than the owner')
+      }
       task.ownerBotId = owner
     }
+    if (patch.reviewerBotId !== undefined) {
+      const reviewer = String(patch.reviewerBotId)
+      if (reviewer !== '') {
+        this.getBot(reviewer)
+        if (reviewer === task.ownerBotId) throw new Error('reviewer must be a different bot than the owner')
+      }
+      task.reviewerBotId = reviewer
+    }
+    if (patch.acceptanceCriteria !== undefined) task.acceptanceCriteria = String(patch.acceptanceCriteria)
+    if (patch.needsApproval !== undefined) task.needsApproval = patch.needsApproval === true
+    if (patch.reviewStatus !== undefined) {
+      if (!REVIEW_STATUSES.has(patch.reviewStatus)) throw new Error(`invalid review status: ${patch.reviewStatus}`)
+      task.reviewStatus = patch.reviewStatus
+    }
+    if (patch.reviewAttempts !== undefined) {
+      const attempts = Number(patch.reviewAttempts)
+      if (!Number.isInteger(attempts) || attempts < 0) throw new Error('reviewAttempts must be a non-negative integer')
+      task.reviewAttempts = attempts
+    }
+    if (patch.reviewNotes !== undefined) task.reviewNotes = String(patch.reviewNotes)
+    if (patch.workspace !== undefined) task.workspace = String(patch.workspace)
     if (patch.roomId !== undefined) task.roomId = String(patch.roomId)
     if (patch.status !== undefined) {
       if (!TASK_STATUSES.has(patch.status)) throw new Error(`invalid task status: ${patch.status}`)
+      if (patch.status === 'done' && (task.reviewStatus !== 'approved' || (task.needsApproval && task.approvalStatus !== 'approved'))) {
+        throw new Error('task cannot be done before independent review and required human approval')
+      }
       task.status = patch.status
       if (patch.status === 'running' && task.startedAt === undefined) task.startedAt = new Date().toISOString()
       if (['done', 'failed'].includes(patch.status)) task.completedAt = new Date().toISOString()
@@ -440,12 +502,148 @@ export class TeamStore {
     const entry = {
       name: String(artifact.name ?? ''),
       path: String(artifact.path ?? ''),
+      relative: String(artifact.relative ?? ''),
+      size: Number.isFinite(artifact.size) ? artifact.size : 0,
       ts: String(artifact.ts ?? new Date().toISOString()),
     }
     task.artifacts.push(entry)
     task.updatedAt = entry.ts
     await this.save()
     return entry
+  }
+
+  /** Submit a finished deliverable for independent review. */
+  async submitTaskReview(taskId, input = {}) {
+    await this.init()
+    const task = this.state.tasks[taskId]
+    if (task === undefined) throw new Error(`unknown task: ${taskId}`)
+    const actorId = String(input.actorBotId ?? '')
+    const actor = actorId === '' ? undefined : this.getBot(actorId)
+    if (actor === undefined || (actor.id !== task.ownerBotId && actor.isMain !== true)) {
+      throw new Error('only the task owner or the Main Bot can submit it for review')
+    }
+    if (!['running', 'waiting'].includes(task.status)) {
+      throw new Error(`task cannot enter review from status ${task.status}`)
+    }
+    if (task.reviewerBotId === task.ownerBotId) throw new Error('reviewer cannot be the task owner')
+    if (!Array.isArray(task.artifacts) || task.artifacts.length === 0) {
+      throw new Error('register at least one deliverable with team_task_artifact before review')
+    }
+    task.status = 'in_review'
+    task.reviewStatus = 'pending'
+    task.reviewNotes = ''
+    task.reviewedBy = ''
+    task.reviewedAt = ''
+    task.submittedAt = new Date().toISOString()
+    task.currentStep = '已提交独立验收'
+    task.updatedAt = task.submittedAt
+    await this.addTaskStep(task.id, {
+      kind: 'review',
+      label: '提交验收',
+      detail: String(input.summary ?? ''),
+      status: 'done',
+      ts: task.submittedAt,
+    }, false)
+    await this.save()
+    return this.normalizeTask(task)
+  }
+
+  /** Record one independent review decision. */
+  async reviewTask(taskId, input = {}) {
+    await this.init()
+    const task = this.state.tasks[taskId]
+    if (task === undefined) throw new Error(`unknown task: ${taskId}`)
+    const reviewerId = String(input.reviewerBotId ?? '')
+    if (reviewerId === '') throw new Error('reviewer bot id is required')
+    const reviewer = this.getBot(reviewerId)
+    if (reviewer.id === task.ownerBotId) throw new Error('owner cannot review their own task')
+    if (task.reviewerBotId !== '' && task.reviewerBotId !== reviewer.id && reviewer.isMain !== true) {
+      throw new Error(`task reviewer is ${task.reviewerBotId}`)
+    }
+    if (task.status !== 'in_review') throw new Error(`task is not in review: ${task.status}`)
+    const verdict = String(input.verdict ?? '')
+    if (!['approve', 'changes', 'reject'].includes(verdict)) throw new Error(`invalid review verdict: ${verdict}`)
+    const ts = new Date().toISOString()
+    task.reviewerBotId = task.reviewerBotId === '' ? reviewer.id : task.reviewerBotId
+    task.reviewedBy = reviewer.id
+    task.reviewedAt = ts
+    task.reviewNotes = String(input.notes ?? '')
+    task.updatedAt = ts
+    if (verdict === 'approve') {
+      task.reviewStatus = 'approved'
+      if (task.needsApproval === true) {
+        task.status = 'needs_approval'
+        task.approvalStatus = 'pending'
+        task.currentStep = '验收通过，等待人工批准'
+        task.completedAt = ''
+      } else {
+        task.status = 'done'
+        task.progress = 100
+        task.approvalStatus = 'none'
+        task.currentStep = '验收通过'
+        task.completedAt = ts
+      }
+      await this.addTaskStep(task.id, { kind: 'review', label: '验收通过', detail: task.reviewNotes, status: 'done', ts }, false)
+    } else {
+      task.reviewAttempts += 1
+      task.reviewStatus = verdict === 'reject' ? 'rejected' : 'changes_requested'
+      task.submittedAt = ''
+      if (verdict === 'reject' || task.reviewAttempts >= 3) {
+        task.status = 'blocked'
+        task.currentStep = verdict === 'reject' ? '验收拒绝' : '验收 3 次未通过，转 blocked'
+      } else {
+        task.status = 'running'
+        task.currentStep = `验收退回（第 ${task.reviewAttempts} 次），继续返工`
+      }
+      await this.addTaskStep(task.id, {
+        kind: 'review',
+        label: verdict === 'reject' ? '验收拒绝' : `验收退回 #${task.reviewAttempts}`,
+        detail: task.reviewNotes,
+        status: 'error',
+        ts,
+      }, false)
+    }
+    await this.save()
+    return this.normalizeTask(task)
+  }
+
+  /** Human approval for a reviewed task that has external side effects. */
+  async approveTask(taskId, input = {}) {
+    await this.init()
+    const task = this.state.tasks[taskId]
+    if (task === undefined) throw new Error(`unknown task: ${taskId}`)
+    if (task.status !== 'needs_approval' || task.reviewStatus !== 'approved') {
+      throw new Error(`task is not waiting for human approval: ${task.status}`)
+    }
+    const ts = new Date().toISOString()
+    task.status = 'done'
+    task.progress = 100
+    task.approvalStatus = 'approved'
+    task.approvedBy = String(input.actor ?? 'human')
+    task.currentStep = '人工批准，任务完成'
+    task.completedAt = ts
+    task.updatedAt = ts
+    await this.addTaskStep(task.id, { kind: 'approval', label: '人工批准', detail: String(input.notes ?? ''), status: 'done', ts }, false)
+    await this.save()
+    return this.normalizeTask(task)
+  }
+
+  /** Reject a reviewed task at the human approval gate and send it back. */
+  async rejectTask(taskId, input = {}) {
+    await this.init()
+    const task = this.state.tasks[taskId]
+    if (task === undefined) throw new Error(`unknown task: ${taskId}`)
+    if (task.status !== 'needs_approval') throw new Error(`task is not waiting for human approval: ${task.status}`)
+    const ts = new Date().toISOString()
+    task.reviewAttempts += 1
+    task.approvalStatus = 'rejected'
+    task.approvedBy = String(input.actor ?? 'human')
+    task.status = task.reviewAttempts >= 3 ? 'blocked' : 'running'
+    task.currentStep = task.status === 'blocked' ? '人工拒绝 3 次，转 blocked' : '人工拒绝，继续返工'
+    task.updatedAt = ts
+    await this.addTaskStep(task.id, { kind: 'approval', label: '人工拒绝', detail: String(input.notes ?? ''), status: 'error', ts }, false)
+    await this.save()
+    return this.normalizeTask(task)
   }
 
   /** Close the tool step matching one callId, if it is still open. */
@@ -587,9 +785,30 @@ export class TeamStore {
     if (patch.role !== undefined) bot.role = String(patch.role).trim()
     if (patch.title !== undefined) bot.title = String(patch.title).trim()
     if (patch.persona !== undefined) bot.persona = String(patch.persona).trim()
+    if (patch.model !== undefined) bot.model = normalizeBotModel(patch.model)
     if (patch.workspace !== undefined) bot.workspace = String(patch.workspace).trim()
     await this.save()
     return bot
+  }
+
+  /**
+   * Forget a bot's conversation context: its room/private Session and every
+   * task Session. The next turn starts from a fresh Session.
+   */
+  async resetBotSessions(botId) {
+    await this.init()
+    const bot = this.getBot(botId)
+    const sessions = [
+      bot.sessionId,
+      bot.taskSessionId,
+      ...Object.values(bot.taskSessions ?? {}),
+    ].filter((id) => typeof id === 'string' && id !== '')
+    bot.sessionId = ''
+    bot.taskSessionId = ''
+    bot.taskSessions = {}
+    bot.taskSessionOrder = []
+    await this.save()
+    return { id: botId, cleared: sessions.length }
   }
 
   /** @returns {object[]} */

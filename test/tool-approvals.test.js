@@ -30,7 +30,10 @@ test('tool approval requests are surfaced and resolved from the command center',
       callId: 'call-1',
       reason: 'workspace write',
     }, async () => { nextCalls += 1; return 'unavailable' })
-    await new Promise((resolve) => setTimeout(resolve, 20))
+    const deadline = Date.now() + 2_000
+    while (bridge.pending().length === 0 && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    }
     const pending = store.listApprovals({ status: 'pending' })
     assert.equal(pending.length, 1)
     assert.equal(pending[0].kind, 'tool.approval')

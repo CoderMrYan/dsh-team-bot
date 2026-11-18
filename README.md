@@ -4,7 +4,7 @@ Native multi-agent group chat for [DeepSeek Harness](https://github.com/deepseek
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-> Status: **0.13.7** — persistent Main Bot command center, durable tasks/steps/artifacts, live per-bot tool activity and presence, asynchronous bot-to-bot handoff, human approvals for destructive actions, tool-stall detection and stop/cancel, separate workspace-bound task Sessions, shared local workspace, watchdog alerts, plus the existing rooms, memory and mobile UI. Install from GitHub; npm publish is optional and not done.
+> Status: **0.18.0** — independent task review with a reviewer distinct from the owner, review/rework/approval states, per-task isolated workspaces with validated artifacts, right-sidebar docking (chat and console side by side), separate Main-Bot/sub-bot turn budgets with delegation pause, per-bot model routing (`provider/model`), per-task Sessions, `team_bot_reset`, persistent Main Bot command center, durable tasks/steps/artifacts, live per-bot tool activity and presence, asynchronous bot-to-bot handoff, human approvals for destructive actions, tool-stall detection and stop/cancel, shared local workspace, watchdog alerts, plus the existing rooms, memory and mobile UI. Install from GitHub; npm publish is optional and not done.
 
 ## Local workspace and safety boundary
 
@@ -80,7 +80,19 @@ Tools:
 | Tool | Purpose |
 |---|---|
 | `team_bot_create` | create a named bot profile (role, persona, model, workspace) |
+| `team_bot_update` | update an existing bot's name, role, persona, model or workspace |
+| `team_bot_reset` | forget a bot's room Session and all task Sessions (profile, model and workspace stay) |
 | `team_bot_list` | list profiles and their bound Session ids |
+| `team_task_create` | create a task with acceptance criteria, an independent reviewer and an optional human-approval flag |
+| `team_task_assign` | assign a task; creates its isolated workspace and runs it in a task Session |
+| `team_task_handoff` | hand a task to another bot asynchronously |
+| `team_task_report` | report progress/blocker; cannot be used to mark the task done |
+| `team_task_submit_review` | register artifacts and submit the deliverable for independent review |
+| `team_task_review` | reviewer approves, requests changes, or rejects; changes wake the owner for rework |
+| `team_task_update` | update status, progress, owner, reviewer or acceptance criteria |
+| `team_task_artifact` | register a real deliverable file inside the task workspace |
+| `team_task_list` / `team_task_get` | read tasks, steps and artifacts |
+| `team_task_delete` | delete a task (human approval required) |
 | `team_compose` | create a whole team from one sentence, with bots, main room, and sub-rooms |
 | `team_template_list` | list the built-in team archetypes |
 | `team_room_create` | create a room with members, chief, reply policy |
@@ -99,6 +111,36 @@ Tools:
 | `team_dm_history` | read a private conversation |
 | `team_dm_list` | list private conversations |
 | `team_chief_desk` | talk to a room chief with its chief role context |
+
+### Independent review and per-task workspaces
+
+An owner can no longer mark its own task done:
+
+```text
+queued → running → in_review → done
+                    ↘ changes (max 3) → blocked
+                    ↘ needs_approval → human approves → done
+```
+
+- `team_task_create` accepts `acceptance_criteria`, `reviewer_bot_id`, and `needs_approval`;
+- the owner registers a real file with `team_task_artifact`, then calls `team_task_submit_review`;
+- the reviewer (never the owner) uses `team_task_review` with `approve / changes / reject`;
+- a changes verdict wakes the owner for rework; three failed rounds block the task;
+- `needs_approval` tasks wait for the panel's 「批准完成 / 拒绝返工」 action;
+- every task runs in `workspace/tasks/<task-id>/`, and its task Session cwd points there; artifacts must stay inside it and must exist.
+
+### Per-bot models
+
+A profile's `model` is a `provider/model` route (for example `openai/gpt-6.1-sol`). After creating or resolving the bot's real Session, the runtime calls `sessionController.selectModel`, so room turns, private chats and workspace task Sessions all run on that route. Changing the profile re-applies on the next turn; clearing it returns the bot to the deployment default. Provider routes are configured in DSH **Settings → Models** (`llm-pi-ai` custom model APIs); an unconfigured route fails with `cannot use model` instead of silently falling back.
+
+### Sessions and timeouts
+
+- **Room/private chats** share one long-lived Session per bot.
+- **One Session per task**: every `team_task_assign`, `team_handoff` and panel task remembers its own Session under `bot.taskSessions[taskId]`. A second review task starts from a clean context; only a re-run of the same task reuses its Session. Up to 30 task Sessions are kept per bot.
+- **`team_bot_reset`** clears a bot's room and task Sessions without touching its profile.
+- **Separate budgets**: `timeoutMs` (default `900000`) for sub-bots, `mainTimeoutMs` (default `1800000`) for the Main Bot, both configured under `dsh-team-bot` in the profile's `cordis.patch.yml`.
+- **Delegation pause**: while the Main Bot is inside `team_task_assign`, `team_handoff`, `team_room_ask`, `team_dm_ask`, `team_chief_desk` or `team_compose`, its timer pauses and re-arms when the child returns. A 20-minute review is not killed by the parent's 15-minute budget.
+- Panel HTTP asks wait `max(timeoutMs, mainTimeoutMs) + 60s`.
 
 ### How a turn works
 
@@ -133,6 +175,8 @@ Bot profiles persist their `sessionId`, so the next room message continues the s
 ### Web panel
 
 Click **团队群组** in the left sidebar, or open **Settings → 团队群组**. Rooms are grouped under their team and can be collapsed or filtered with the search box; the page shows member chips, the timeline with bot avatars, a composer (type `@` to pick a member), room creation with Bot search, and a memory drawer with room/team tabs. **管理** edits members and chief, renames the team, and can delete the room or the whole team (with confirmation).
+
+The **并排** button in the console header docks the console in the conversation's **right sidebar**, side by side with the chat (the column is resizable); the right sidebar's **+** guide also lists **团队群组**. The right column only exists while a Session is on screen, and the docked body uses the compact layout.
 
 On phones (viewport below 720px) the room list becomes a drawer with a backdrop, the chat fills the width, the header wraps, and memory/manage/compose/create open as bottom sheets; the composer respects the safe area.
 

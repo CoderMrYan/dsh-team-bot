@@ -7,6 +7,7 @@
  * actually doing instead of only its final answer.
  */
 import { randomUUID } from 'node:crypto'
+import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import { formatMemory } from './memory.js'
 
@@ -32,6 +33,36 @@ export function textOf(content) {
     .join('\n')
     .trim()
 }
+
+/**
+ * Split one `provider/model` bot setting. Model ids may contain slashes, so only
+ * the text before the first slash names the provider route.
+ * @param {string} value - the stored bot model setting.
+ * @returns {{ provider: string, model: string } | undefined} the parsed selection, or undefined when unset.
+ */
+export function parseModelRef(value) {
+  const ref = String(value ?? '').trim()
+  if (ref === '') return undefined
+  const slash = ref.indexOf('/')
+  if (slash <= 0 || slash === ref.length - 1) {
+    throw new Error(`bot model must be "provider/model": ${ref}`)
+  }
+  return { provider: ref.slice(0, slash), model: ref.slice(slash + 1) }
+}
+
+/**
+ * Tools that run another bot's turn inside this one. While one of these is in
+ * flight the parent's wall clock is paused, so a long child review cannot be
+ * killed by the parent's own budget.
+ */
+const DELEGATION_TOOLS = new Set([
+  'team_task_assign',
+  'team_handoff',
+  'team_room_ask',
+  'team_dm_ask',
+  'team_chief_desk',
+  'team_compose',
+])
 
 /** @returns {string} a short single-line detail for activity cards. */
 function compact(value, limit = 220) {
@@ -60,9 +91,13 @@ TASK CONTRACT
 - Task id: ${task.id}
 - Title: ${task.title}
 - Brief: ${task.brief || '(none)'}
+- Acceptance criteria: ${task.acceptanceCriteria || '(not specified; infer concrete, checkable criteria)'}
+- Reviewer bot: ${task.reviewerBotId || '(not assigned yet)'}
+- Workspace: ${task.workspace || '(assigned when this task starts)'}
 - Owner: ${task.ownerBotId || 'you'}
 - Call team_task_report({ task_id: "${task.id}", status: "running", progress: 10, message: "..." }) at start, at every milestone, when blocked, and when finished.
-- Put deliverables in the shared team workspace and report their paths with team_task_artifact when possible.
+- Put deliverables in this task's workspace and register their paths with team_task_artifact.
+- When the deliverable is ready, call team_task_submit_review with a concrete summary. Do not mark the task done yourself; an independent reviewer must approve it.
 - Do not set sandbox_permissions to "danger-full-access" from a team bot. Work inside the shared workspace; if the task truly needs full machine access, report blocked and let the Lead enable it explicitly.
 - If another bot owns the next stage, call team_handoff with this task id and the target bot id instead of doing everything yourself.
 - If a tool returns an approval cancelled/unavailable error, do not retry the same call. Report the blocker and ask the Lead to change the DSH execution policy or use a workspace/session with shell access.
@@ -135,16 +170,45 @@ ${bot.persona}${memorySection}${taskSection(task)}
 Work the task now. Use your tools to inspect files, run commands, search the web, write artifacts, and verify results. Rules:
 - Reply in Chinese unless the task is in another language.
 - This is not a one-line roleplay reply: do the work, then report a concrete result.
-- Call team_task_report with task_id "${task.id}" and bot_id "${bot.id}" when starting, at each major milestone, if blocked, and when done.
+- Do not reply with a final answer only; register the deliverable with team_task_artifact, then call team_task_submit_review with a concrete summary. The reviewer, not you, decides done.
+- Call team_task_report with task_id "${task.id}" and bot_id "${bot.id}" when starting, at each major milestone, and when blocked. When the deliverable is ready, register it and call team_task_submit_review; do not mark it done yourself.
 - Keep the room/command center informed with short operational updates; do not silently run for a long time.
 - If you need a human decision, report status "blocked" and state the exact question.`
+}
+
+/** @returns {string} the model-facing prompt for an independent task review. */
+export function buildReviewPrompt(bot, task, room) {
+  const roomLine = room === undefined ? '' : `\nShared room: "${room.name}" (${room.id}).`
+  const artifacts = (task.artifacts ?? [])
+    .map((artifact) => `- ${artifact.relative || artifact.path} (${artifact.size ?? 0} bytes)`)
+    .join('\n')
+  return `You are "${bot.name}", ${bot.role}. You are the independent reviewer for a task you did not write.${roomLine}
+
+Task id: ${task.id}
+Title: ${task.title}
+Owner: ${task.ownerBotId}
+Brief: ${task.brief || '(none)'}
+Acceptance criteria: ${task.acceptanceCriteria || '(not specified)'}
+Workspace: ${task.workspace || '(none)'}
+
+Deliverables:
+${artifacts || '- none registered'}
+
+Review rules:
+- Read the task with team_task_get and inspect the deliverables in the workspace.
+- Do not modify the deliverables; you are checking, not producing.
+- Check every acceptance criterion and look for concrete missing evidence.
+- Call team_task_review with task_id "${task.id}", your reviewer_bot_id "${bot.id}", and verdict "approve", "changes" or "reject".
+- "changes" sends the task back to the owner with your notes; three failed rounds block it.
+- Reply in Chinese unless the task is in another language, and keep the final review note concrete.
+`
 }
 
 /** @returns {string} the model-facing prompt for the main orchestrator. */
 export function buildMainPrompt(mainBot, bots, rooms, tasks, presence, approvals = [], command = '') {
   const botLines = bots.map((bot) => `- ${bot.id} ${bot.name} | ${bot.role} | ${bot.isMain ? 'MAIN' : 'sub-bot'}`).join('\n')
   const roomLines = rooms.map((room) => `- ${room.id} ${room.name} | members: ${room.members.join(', ')} | chief: ${room.chiefId || 'none'}`).join('\n')
-  const taskLines = tasks.slice(0, 20).map((task) => `- ${task.id} [${task.status}] ${task.title} | owner: ${task.ownerBotId || 'unassigned'} | ${task.currentStep || 'no step'}`).join('\n')
+  const taskLines = tasks.slice(0, 20).map((task) => `- ${task.id} [${task.status}] ${task.title} | owner: ${task.ownerBotId || 'unassigned'} | reviewer: ${task.reviewerBotId || 'none'} | review: ${task.reviewStatus} | ${task.currentStep || 'no step'}`).join('\n')
   const presenceLines = presence.map((row) => `- ${row.botId}: ${row.status}${row.action ? ` · ${row.action}` : ''}`).join('\n')
   const approvalLines = approvals.map((approval) => `- ${approval.id} | ${approval.kind} | ${approval.summary}`).join('\n')
   return `You are "${mainBot.name}", the MAIN BOT and orchestrator of this DSH team.
@@ -170,9 +234,10 @@ The Lead's latest command (act on this now):
 ${command || '(none)'}
 
 Operating rules:
-- For non-trivial work, create a task first (team_task_create), then create or choose a sub-bot and assign it (team_task_assign).
+- For non-trivial work, create a task first (team_task_create), then create or choose a sub-bot and assign it (team_task_assign). Give the task acceptance criteria and, whenever possible, a reviewer that is not the owner.
+- An owner cannot mark a task done. It must register an artifact and call team_task_submit_review; the reviewer calls team_task_review. Three failed review rounds block the task.
 - If the task belongs to a room, pass room_id when creating it; if it was created without one, bind it with team_task_update(room_id).
-- A sub-bot must report through team_task_report; when you need a status, call team_task_status or read the task.
+- A sub-bot must report through team_task_report; when you need a status, call team_task_list or team_task_get.
 - Keep the Lead informed with short progress updates, especially after a command, a handoff, a block, and a completion.
 - Do not claim a sub-bot did work unless the task/activity log shows it.
 - Destructive actions (deleting bots, rooms, teams or tasks) create a pending approval. Tell the Lead to approve it in the command center, then call the same tool with its approval_id. Never claim a destructive action succeeded before it is approved and executed.
@@ -191,11 +256,47 @@ export class BotRuntime {
   constructor(ctx, store, options = {}) {
     this.ctx = ctx
     this.store = store
-    this.timeoutMs = Number.isInteger(options.timeoutMs) ? options.timeoutMs : 180_000
+    this.timeoutMs = Number.isInteger(options.timeoutMs) ? options.timeoutMs : 900_000
+    this.mainTimeoutMs = Number.isInteger(options.mainTimeoutMs) ? options.mainTimeoutMs : 1_800_000
     this.pollMs = Number.isInteger(options.pollMs) ? options.pollMs : 600
     this.workspaceRoot = String(options.workspaceRoot ?? '').trim()
     this.chains = new Map()
     this.active = new Map()
+    this.modelApplied = new Map()
+  }
+
+  /** @returns {number} the wall-clock budget for one turn of this bot. */
+  timeoutFor(bot) {
+    return bot?.isMain === true ? this.mainTimeoutMs : this.timeoutMs
+  }
+
+  /** @returns {number} the longest budget any single turn can use; HTTP callers wait this long. */
+  get maxTimeoutMs() {
+    return Math.max(this.timeoutMs, this.mainTimeoutMs)
+  }
+
+  /** Resolve and create the isolated workspace for one task. */
+  async ensureTaskWorkspace(taskId) {
+    const root = this.workspaceRoot !== '' ? this.workspaceRoot : path.join(this.store.root, 'workspace')
+    const dir = path.join(root, 'tasks', String(taskId))
+    await mkdir(dir, { recursive: true })
+    return dir
+  }
+
+  /**
+   * Resolve one artifact against a task workspace and reject paths outside it.
+   * @returns {Promise<{ absolute: string, relative: string }>}
+   */
+  async resolveTaskArtifact(taskId, artifactPath) {
+    const workspace = await this.ensureTaskWorkspace(taskId)
+    const raw = String(artifactPath ?? '').trim()
+    if (raw === '') throw new Error('artifact path is required')
+    const absolute = path.isAbsolute(raw) ? path.resolve(raw) : path.resolve(workspace, raw)
+    const relative = path.relative(workspace, absolute)
+    if (relative === '' || relative.startsWith('..') || path.isAbsolute(relative)) {
+      throw new Error('artifact must stay inside the task workspace')
+    }
+    return { absolute, relative }
   }
 
   /** @returns {Promise<object[]>} current Session events. */
@@ -204,26 +305,92 @@ export class BotRuntime {
     return snapshot.events ?? []
   }
 
-  /** Resolve or create the Session owned by one bot profile. Task runs use a separate workspace-bound Session. */
+  /**
+   * Bind the profile's configured model to one Session. Applied once per
+   * Session per process, and again when the profile setting changes; an empty
+   * setting leaves the Session on its default model.
+   * @param {object} bot - the bot profile carrying `model`.
+   * @param {string} sessionId - the Session the next turn runs in.
+   * @returns {Promise<void>}
+   */
+  async applyModel(bot, sessionId) {
+    const ref = String(bot.model ?? '').trim()
+    const applied = this.modelApplied.get(sessionId) ?? ''
+    if (ref === applied) return
+    if (ref === '') {
+      this.modelApplied.set(sessionId, '')
+      return
+    }
+    const selection = parseModelRef(ref)
+    try {
+      await this.ctx.sessionController.selectModel({
+        sessionId,
+        provider: selection.provider,
+        model: selection.model,
+      })
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error)
+      throw new Error(`bot ${bot.name}: cannot use model "${ref}": ${reason}`)
+    }
+    this.modelApplied.set(sessionId, ref)
+  }
+
+  /** @returns {string} the Session id stored for this turn, or '' when none is bound yet. */
+  storedSession(bot, options = {}) {
+    if (options.taskSession === true && typeof options.taskId === 'string' && options.taskId !== '') {
+      return bot.taskSessions?.[options.taskId] ?? ''
+    }
+    return typeof bot.sessionId === 'string' ? bot.sessionId : ''
+  }
+
+  /** Remember one Session id for the profile, keyed by task when the turn belongs to one. */
+  rememberSession(bot, sessionId, options = {}) {
+    if (options.taskSession === true && typeof options.taskId === 'string' && options.taskId !== '') {
+      const order = Array.isArray(bot.taskSessionOrder)
+        ? bot.taskSessionOrder.filter((id) => id !== options.taskId)
+        : []
+      order.push(options.taskId)
+      const sessions = { ...(bot.taskSessions ?? {}), [options.taskId]: sessionId }
+      while (order.length > 30) delete sessions[order.shift()]
+      bot.taskSessions = sessions
+      bot.taskSessionOrder = order
+      return
+    }
+    bot.sessionId = sessionId
+  }
+
+  /**
+   * Resolve or create the Session this turn runs in. Room and private turns share
+   * one long-lived Session; every task gets its own Session, so a second review
+   * task cannot anchor on the first one's answer.
+   */
   async ensureSession(bot, signal, options = {}) {
-    const key = options.taskSession === true ? 'taskSessionId' : 'sessionId'
-    if (typeof bot[key] === 'string' && bot[key] !== '') {
+    const stored = this.storedSession(bot, options)
+    if (stored !== '') {
+      let live = false
       try {
-        const resolved = await this.ctx.sessionController.resolveAgent(bot[key])
-        if (resolved?.agent !== undefined) return bot[key]
+        const resolved = await this.ctx.sessionController.resolveAgent(stored)
+        live = resolved?.agent !== undefined
       } catch {
         // A deleted or unreadable Session falls through to a new one.
       }
+      if (live) {
+        await this.applyModel(bot, stored)
+        return stored
+      }
     }
-    const cwd = typeof bot.workspace === 'string' && bot.workspace !== ''
-      ? bot.workspace
-      : this.workspaceRoot
+    const cwd = typeof options.workspace === 'string' && options.workspace !== ''
+      ? options.workspace
+      : typeof bot.workspace === 'string' && bot.workspace !== ''
+        ? bot.workspace
+        : this.workspaceRoot
     const created = await this.ctx.sessionController.create({
       ...(cwd === '' ? {} : { cwd }),
     })
-    bot[key] = created.sessionId
+    this.rememberSession(bot, created.sessionId, options)
     await this.store.save()
-    return bot[key]
+    await this.applyModel(bot, created.sessionId)
+    return created.sessionId
   }
 
   /**
@@ -366,10 +533,14 @@ export class BotRuntime {
   }
 
   async runTurn(bot, prompt, signal, context = {}) {
-    const timeout = AbortSignal.timeout(this.timeoutMs)
-    const fused = signal === undefined ? timeout : AbortSignal.any([signal, timeout])
-    const sessionId = await this.ensureSession(bot, fused, { taskSession: context.taskSession === true })
+    const budget = this.timeoutFor(bot)
+    const controller = new AbortController()
+    const fused = signal === undefined ? controller.signal : AbortSignal.any([signal, controller.signal])
     const taskId = String(context.taskId ?? '')
+    const sessionId = await this.ensureSession(bot, fused, {
+      taskSession: context.taskSession === true,
+      taskId,
+    })
     this.active.set(bot.id, taskId)
     if (taskId !== '') {
       try {
@@ -391,14 +562,28 @@ export class BotRuntime {
     let lastEventAt = Date.now()
     let toolRunning = false
     let stallNotified = false
-    const cancelTimer = setTimeout(() => {
-      try {
-        this.ctx.sessionController.cancel({ sessionId })
-      } catch {
-        // The turn may have already settled.
-      }
-    }, this.timeoutMs + 1_000)
-    cancelTimer.unref?.()
+    let delegationDepth = 0
+    let timedOut = false
+    let timer
+    const arm = () => {
+      if (timer !== undefined) clearTimeout(timer)
+      timer = setTimeout(() => {
+        timedOut = true
+        try {
+          this.ctx.sessionController.cancel({ sessionId })
+        } catch {
+          // The turn may have already settled.
+        }
+        controller.abort(new Error(`team-bot turn timed out after ${budget}ms`))
+      }, budget)
+      timer.unref?.()
+    }
+    const pause = () => {
+      if (timer === undefined) return
+      clearTimeout(timer)
+      timer = undefined
+    }
+    arm()
     try {
       await this.ctx.sessionController.prompt(
         {
@@ -409,10 +594,8 @@ export class BotRuntime {
         },
         fused,
       )
-      const deadline = Date.now() + this.timeoutMs
       let assistantText = ''
-      while (Date.now() < deadline) {
-        if (fused.aborted) throw new Error('team-bot turn aborted')
+      while (!fused.aborted) {
         await sleep(this.pollMs, fused)
         const events = await this.events(sessionId, fused)
         const fresh = events.filter((event) => event.seq > lastSeq)
@@ -422,8 +605,21 @@ export class BotRuntime {
         }
         for (const event of fresh) {
           lastSeq = event.seq
-          if (event.type === 'tool/call') toolRunning = true
-          if (event.type === 'tool/result' || event.type === 'assistant/message' || event.type === 'turn/end') {
+          if (event.type === 'tool/call') {
+            toolRunning = true
+            if (DELEGATION_TOOLS.has(String(event.data?.name ?? ''))) {
+              delegationDepth += 1
+              pause()
+            }
+          }
+          if (event.type === 'tool/result') {
+            toolRunning = false
+            if (delegationDepth > 0) {
+              delegationDepth -= 1
+              if (delegationDepth === 0) arm()
+            }
+          }
+          if (event.type === 'assistant/message' || event.type === 'turn/end') {
             toolRunning = false
           }
           await this.handleEvent(bot, event, { taskId })
@@ -449,9 +645,12 @@ export class BotRuntime {
           })
         }
       }
-      throw new Error(`team-bot turn timed out after ${this.timeoutMs}ms`)
+      throw new Error('team-bot turn aborted')
+    } catch (error) {
+      if (timedOut) throw new Error(`team-bot turn timed out after ${budget}ms`)
+      throw error
     } finally {
-      clearTimeout(cancelTimer)
+      pause()
       this.active.delete(bot.id)
       if (!ended) {
         await this.presence(bot, { status: 'blocked', action: '回合中断', taskId: '' })

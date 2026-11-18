@@ -5,11 +5,13 @@
  * decisions. P1 adds the real-Session runtime that turns `routed` into replies.
  */
 import { defineTool } from '@deepseek-ai/dsh-tools'
+import { stat } from 'node:fs/promises'
 import { askDirect, askRoom, assignTask, handoffTask } from './actions.js'
 import { approvalGate } from './approvals.js'
 import { createAtom, createPersonaItem } from './memory.js'
 import { composeTeam } from './compose.js'
 import { commandState, ensureMain, notifyMain } from './main.js'
+import { buildReviewPrompt } from './runtime.js'
 import { listTemplates } from './templates.js'
 
 const ANY_OBJECT = { type: 'object', additionalProperties: true }
@@ -57,8 +59,11 @@ export function createTools(store, runtime) {
       description: 'Create one durable task owned by the team. Use this before assigning work so progress, blockers and artifacts are visible.',
       parameters: {
         title: { type: 'string', required: true, description: 'Short task title.' },
-        brief: { type: 'string', description: 'Detailed brief, acceptance criteria and output path.' },
+        brief: { type: 'string', description: 'Detailed brief and output location.' },
+        acceptance_criteria: { type: 'string', description: 'Verifiable acceptance criteria the reviewer checks.' },
         owner_bot_id: { type: 'string', description: 'Optional bot id; empty means unassigned.' },
+        reviewer_bot_id: { type: 'string', description: 'Independent reviewer bot id; must differ from the owner.' },
+        needs_approval: { type: 'boolean', description: 'True when a human must approve after review (publish, deploy, spend, destructive external action).' },
         room_id: { type: 'string', description: 'Optional room id for the result.' },
         team_id: { type: 'string', description: 'Optional team id.' },
         parent_id: { type: 'string', description: 'Optional parent task id for subtasks.' },
@@ -68,7 +73,10 @@ export function createTools(store, runtime) {
         return await store.createTask({
           title: args.title,
           brief: args.brief,
+          acceptanceCriteria: args.acceptance_criteria,
           ownerBotId: args.owner_bot_id,
+          reviewerBotId: args.reviewer_bot_id,
+          needsApproval: args.needs_approval === true,
           roomId: args.room_id,
           teamId: args.team_id,
           parentId: args.parent_id,
@@ -122,9 +130,12 @@ export function createTools(store, runtime) {
       description: 'Update one task status, progress, owner or current step. Use status done only when the deliverable is actually ready.',
       parameters: {
         task_id: { type: 'string', required: true, description: 'Task id.' },
-        status: { type: 'string', enum: ['queued', 'running', 'waiting', 'blocked', 'done', 'failed'], description: 'New status.' },
+        status: { type: 'string', enum: ['queued', 'running', 'waiting', 'blocked', 'done', 'failed'], description: 'New status. Done is rejected unless the task passed independent review; use team_task_submit_review.' },
         progress: { type: 'integer', description: '0-100.' },
         owner_bot_id: { type: 'string', description: 'New owner bot id.' },
+        reviewer_bot_id: { type: 'string', description: 'Independent reviewer bot id.' },
+        acceptance_criteria: { type: 'string', description: 'Verifiable acceptance criteria.' },
+        needs_approval: { type: 'boolean', description: 'Whether human approval is required after review.' },
         room_id: { type: 'string', description: 'Bind the task to a room id (optional).' },
         current_step: { type: 'string', description: 'Short current step label.' },
       },
@@ -134,6 +145,9 @@ export function createTools(store, runtime) {
           status: args.status,
           progress: args.progress,
           ownerBotId: args.owner_bot_id,
+          reviewerBotId: args.reviewer_bot_id,
+          acceptanceCriteria: args.acceptance_criteria,
+          needsApproval: args.needs_approval,
           roomId: args.room_id,
           currentStep: args.current_step,
         })
@@ -187,6 +201,120 @@ export function createTools(store, runtime) {
     }),
 
     defineTool({
+      name: 'team_task_submit_review',
+      description: 'Submit a finished task for independent review. Requires at least one registered artifact. The owner cannot review the task.',
+      parameters: {
+        task_id: { type: 'string', required: true, description: 'Task id.' },
+        bot_id: { type: 'string', required: true, description: 'Your bot id (the owner).' },
+        summary: { type: 'string', description: 'What changed and where the reviewer should look.' },
+        artifact_paths: { type: 'array', items: { type: 'string' }, description: 'Optional deliverable paths to register before submitting.' },
+      },
+      output: jsonOutput(),
+      async execute(args) {
+        const task = store.getTask(args.task_id)
+        for (const artifactPath of args.artifact_paths ?? []) {
+          const resolved = await runtime.resolveTaskArtifact(task.id, artifactPath)
+          const info = await stat(resolved.absolute)
+          if (!info.isFile()) throw new Error('artifact path must point to a file')
+          await store.addTaskArtifact(task.id, {
+            path: resolved.absolute,
+            relative: resolved.relative,
+            name: resolved.relative.split(/[\\/]/).pop(),
+            size: info.size,
+          })
+        }
+        const reviewed = await store.submitTaskReview(task.id, {
+          actorBotId: args.bot_id,
+          summary: args.summary,
+        })
+        await store.setPresence(args.bot_id, { status: 'idle', taskId: '', action: '已提交验收' })
+        await store.recordActivity({
+          botId: args.bot_id,
+          taskId: task.id,
+          kind: 'review',
+          label: '提交独立验收',
+          detail: args.summary ?? '',
+          status: 'done',
+        })
+        const reviewer = reviewed.reviewerBotId === '' ? undefined : store.getBot(reviewed.reviewerBotId)
+        if (reviewer !== undefined && reviewer.isMain !== true) {
+          await store.setPresence(reviewer.id, { status: 'thinking', taskId: reviewed.id, action: '独立验收中' }).catch(() => undefined)
+          await store.recordActivity({
+            botId: reviewer.id,
+            taskId: reviewed.id,
+            kind: 'review',
+            label: '已通知 reviewer',
+            detail: reviewer.name,
+            status: 'done',
+          })
+          void runtime.ask(reviewer, buildReviewPrompt(reviewer, reviewed, task.roomId === '' ? undefined : store.getRoom(task.roomId)), undefined, {
+            taskId: reviewed.id,
+            taskSession: true,
+            workspace: reviewed.workspace,
+          }).catch(async (error) => {
+            await store.recordActivity({
+              botId: reviewer.id,
+              taskId: reviewed.id,
+              kind: 'error',
+              label: 'reviewer 启动失败',
+              detail: error instanceof Error ? error.message : String(error),
+              status: 'error',
+            }).catch(() => undefined)
+          })
+        }
+        await notifyMain(store, `[待验收] ${store.getBot(args.bot_id).name} · ${reviewed.title}\n${args.summary ?? ''}`)
+        return reviewed
+      },
+    }),
+
+    defineTool({
+      name: 'team_task_review',
+      description: 'Review a task submitted by another bot. Approve only when the acceptance criteria and artifacts are satisfied. Changes sends the task back to its owner; three failed rounds block it.',
+      parameters: {
+        task_id: { type: 'string', required: true, description: 'Task id.' },
+        reviewer_bot_id: { type: 'string', required: true, description: 'Your bot id (the reviewer, not the owner).' },
+        verdict: { type: 'string', required: true, enum: ['approve', 'changes', 'reject'], description: 'Review decision.' },
+        notes: { type: 'string', description: 'Concrete findings and required changes.' },
+      },
+      output: jsonOutput(),
+      async execute(args) {
+        const reviewed = await store.reviewTask(args.task_id, {
+          reviewerBotId: args.reviewer_bot_id,
+          verdict: args.verdict,
+          notes: args.notes,
+        })
+        await store.recordActivity({
+          botId: args.reviewer_bot_id,
+          taskId: args.task_id,
+          kind: 'review',
+          label: args.verdict === 'approve' ? '验收通过' : args.verdict === 'changes' ? '验收退回' : '验收拒绝',
+          detail: args.notes ?? '',
+          status: args.verdict === 'approve' ? 'done' : 'error',
+        })
+        await store.setPresence(args.reviewer_bot_id, { status: 'idle', taskId: '', action: '验收完成' }).catch(() => undefined)
+        if (args.verdict === 'changes' && reviewed.status === 'running' && reviewed.ownerBotId !== '') {
+          await store.setPresence(reviewed.ownerBotId, { status: 'idle', taskId: '', action: '等待返工' }).catch(() => undefined)
+          void assignTask(store, runtime, {
+            taskId: reviewed.id,
+            botId: reviewed.ownerBotId,
+            instruction: `验收退回：${args.notes ?? ''}`,
+          }).catch(async (error) => {
+            await store.recordActivity({
+              botId: reviewed.ownerBotId,
+              taskId: reviewed.id,
+              kind: 'error',
+              label: '返工启动失败',
+              detail: error instanceof Error ? error.message : String(error),
+              status: 'error',
+            }).catch(() => undefined)
+          })
+        }
+        await notifyMain(store, `[${args.verdict === 'approve' ? '验收通过' : '验收退回'}] ${reviewed.title}\n${args.notes ?? ''}`)
+        return reviewed
+      },
+    }),
+
+    defineTool({
       name: 'team_task_delete',
       description: 'Delete one task record. Destructive: requires an approved approval_id; without one this creates a pending approval.',
       parameters: {
@@ -208,17 +336,22 @@ export function createTools(store, runtime) {
 
     defineTool({
       name: 'team_task_artifact',
-      description: 'Register one deliverable file path (inside the shared team workspace) on a task.',
+      description: 'Register one real deliverable file inside this task\'s isolated workspace. The reviewer treats this path as the authoritative output.',
       parameters: {
         task_id: { type: 'string', required: true, description: 'Task id.' },
-        path: { type: 'string', required: true, description: 'Absolute path or workspace-relative path.' },
+        path: { type: 'string', required: true, description: 'Path inside the task workspace, absolute or workspace-relative.' },
         name: { type: 'string', description: 'Optional display name.' },
       },
       output: jsonOutput(),
       async execute(args) {
+        const resolved = await runtime.resolveTaskArtifact(args.task_id, args.path)
+        const info = await stat(resolved.absolute)
+        if (!info.isFile()) throw new Error('artifact path must point to a file')
         return await store.addTaskArtifact(args.task_id, {
-          path: args.path,
-          name: args.name ?? args.path.split(/[\\/]/).pop(),
+          path: resolved.absolute,
+          name: args.name ?? resolved.relative.split(/[\\/]/).pop(),
+          size: info.size,
+          relative: resolved.relative,
         })
       },
     }),
@@ -288,18 +421,55 @@ export function createTools(store, runtime) {
     defineTool({
       name: 'team_bot_create',
       description:
-        'Create one named bot profile (role, persona, model, workspace). A profile is not a live Session until the runtime binds it.',
+        'Create one named bot profile (role, persona, model, workspace). A profile is not a live Session until the runtime binds it. Pass model as "provider/model" (for example "deepseek-official/deepseek-v4-flash") to run this bot on that model route; omit it to use the deployment default.',
       parameters: {
         name: { type: 'string', required: true, description: 'Unique display name.' },
         role: { type: 'string', required: true, description: 'Short responsibility, such as researcher or reviewer.' },
         persona: { type: 'string', description: 'Standing instructions for this bot.' },
-        model: { type: 'string', description: 'Optional provider/model id.' },
+        model: { type: 'string', description: 'Optional "provider/model" route, such as "openai/gpt-6.1-sol"; empty uses the deployment default.' },
         workspace: { type: 'string', description: 'Optional working directory for this bot.' },
       },
       output: jsonOutput(),
       async execute(args) {
         await store.init()
         return await store.createBot(args)
+      },
+    }),
+
+    defineTool({
+      name: 'team_bot_update',
+      description:
+        'Update one bot profile: name, role, persona, model, workspace. The model setting is "provider/model"; an empty string clears it back to the deployment default. The next turn of that bot uses the new model on its existing Session.',
+      parameters: {
+        bot_id: { type: 'string', required: true, description: 'Bot id.' },
+        name: { type: 'string', description: 'New display name.' },
+        role: { type: 'string', description: 'New short responsibility.' },
+        persona: { type: 'string', description: 'New standing instructions.' },
+        model: { type: 'string', description: 'New "provider/model" route, or an empty string to use the deployment default.' },
+        workspace: { type: 'string', description: 'New working directory; empty uses the team workspace.' },
+      },
+      output: jsonOutput(),
+      async execute(args) {
+        await store.init()
+        const patch = {}
+        for (const key of ['name', 'role', 'persona', 'model', 'workspace']) {
+          if (args[key] !== undefined) patch[key] = args[key]
+        }
+        return await store.updateBot(args.bot_id, patch)
+      },
+    }),
+
+    defineTool({
+      name: 'team_bot_reset',
+      description:
+        'Forget one bot\'s conversation context: clear its room/private Session and every task Session, so the next turn starts from a fresh Session. Use it when earlier answers keep anchoring a review or a new task; it does not touch the profile, model or workspace.',
+      parameters: {
+        bot_id: { type: 'string', required: true, description: 'Bot id.' },
+      },
+      output: jsonOutput(),
+      async execute(args) {
+        await store.init()
+        return await store.resetBotSessions(args.bot_id)
       },
     }),
 

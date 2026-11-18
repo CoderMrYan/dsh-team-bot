@@ -35,10 +35,29 @@ test('client bundle registers sidebar, main, and settings entries', () => {
   })
   assert.equal(row.id, 'dsh-team-bot')
   const module = row.factory(require)
-  assert.equal(module.inject.length, 1)
+  assert.equal(module.inject.length, 3)
   assert.equal(module.inject[0], 'slots')
+  assert.equal(module.inject[1], 'sidebarRightTabs')
+  assert.equal(module.inject[2], 'sidebarRight')
   const registered = []
   const ctx = {
+    effect: (fn) => {
+      const dispose = fn()
+      return () => {
+        if (typeof dispose === 'function') dispose()
+      }
+    },
+    sidebarRightTabs: {
+      register: (options) => {
+        registered.push({ tabType: options })
+        return () => undefined
+      },
+    },
+    sidebarRight: {
+      openTab: () => {
+        registered.push({ opened: true })
+      },
+    },
     slots: {
       inject: (name, register) => { registered.push({ injected: name }); register() },
       register: (options, Component) => { registered.push({ options, Component }); return () => undefined },
@@ -46,7 +65,7 @@ test('client bundle registers sidebar, main, and settings entries', () => {
   }
   module.apply(ctx)
   const injected = registered.filter((entry) => entry.injected !== undefined).map((entry) => entry.injected)
-  assert.deepEqual(injected, ['sidebar.panellist', 'main', 'settings.section'])
+  assert.deepEqual(injected, ['sidebar.panellist', 'main', 'settings.section', 'sidebar.right.pane.tab'])
   const options = registered.filter((entry) => entry.options !== undefined)
   const sidebar = options.find((entry) => entry.options.name === 'sidebar.panellist')
   assert.equal(sidebar.options.id, 'team-bot')
@@ -58,4 +77,12 @@ test('client bundle registers sidebar, main, and settings entries', () => {
   assert.equal(settings.options.id, 'team-bot')
   assert.equal(settings.options.label, '团队群组')
   assert.equal(typeof settings.Component, 'function')
+  const pane = options.find((entry) => entry.options.name === 'sidebar.right.pane.tab')
+  assert.equal(pane.options.key, 'dsh-team-bot')
+  assert.equal(typeof pane.Component, 'function')
+  const tabType = registered.find((entry) => entry.tabType !== undefined).tabType
+  assert.equal(tabType.id, 'dsh-team-bot')
+  assert.equal(tabType.kind, 'team-bot')
+  assert.equal(tabType.priority, 'extension')
+  assert.equal(tabType.multiple, false)
 })

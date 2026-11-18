@@ -4,7 +4,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-> 状态：**0.13.7** — 常驻主 Bot 指挥台、可追踪任务/步骤/产物、每个 Bot 的工具级实时活动与在线状态、Bot 间异步交接、破坏性操作人工审批、工具卡住检测与停止回合、独立的 workspace 任务 Session、共享本机 workspace、看门狗告警，以及原有的房间/记忆/手机 UI。从 GitHub 安装；npm 发布是可选项，暂未发布。
+> 状态：**0.18.0** — 独立任务验收（reviewer 不能是 owner）、验收/返工/人工批准状态、每任务独立工作目录与 artifact 校验、右侧栏停靠（聊天与控制台并排）、主/子 Bot 分开的回合预算与委派暂停、每个 Bot 独立模型路由（provider/model）、每个任务独立 Session、`team_bot_reset`、常驻主 Bot 指挥台、可追踪任务/步骤/产物、每个 Bot 的工具级实时活动与在线状态、Bot 间异步交接、破坏性操作人工审批、工具卡住检测与停止回合、共享本机 workspace、看门狗告警，以及原有的房间/记忆/手机 UI。从 GitHub 安装；npm 发布是可选项，暂未发布。
 
 ## 本机 workspace 与安全边界
 
@@ -80,7 +80,19 @@ test/           store、routing、runtime、memory、client-bundle 测试
 | 工具 | 用途 |
 |---|---|
 | `team_bot_create` | 创建具名 Bot 画像（角色、人设、模型、workspace） |
+| `team_bot_update` | 修改已有 Bot 的名称、角色、人设、模型或 workspace |
+| `team_bot_reset` | 清空某个 Bot 的房间 Session 和全部任务 Session（画像/模型/workspace 不动） |
 | `team_bot_list` | 列出画像及绑定的 Session id |
+| `team_task_create` | 创建任务，可带验收标准、独立 reviewer、人工审批标记 |
+| `team_task_assign` | 派发任务；自动创建该任务的独立工作目录并在独立 Session 中执行 |
+| `team_task_handoff` | 把任务异步交接给另一个 Bot |
+| `team_task_report` | 上报进行中/阻塞/失败；不能用来直接完成 |
+| `team_task_submit_review` | owner 注册 artifact 后提交独立验收 |
+| `team_task_review` | reviewer 通过/退回/拒绝；退回会自动唤醒 owner 返工 |
+| `team_task_update` | 更新状态、进度、owner、reviewer、验收标准 |
+| `team_task_artifact` | 登记任务目录内真实存在的交付文件 |
+| `team_task_list` / `team_task_get` | 读取任务、步骤和产物 |
+| `team_task_delete` | 删除任务（需要人工审批） |
 | `team_compose` | 一句话创建整个团队：Bot、主群、分组 |
 | `team_template_list` | 列出内置团队模板 |
 | `team_room_create` | 创建房间，指定成员、总管、回复策略 |
@@ -99,6 +111,45 @@ test/           store、routing、runtime、memory、client-bundle 测试
 | `team_dm_history` | 读取私聊记录 |
 | `team_dm_list` | 列出私聊会话 |
 | `team_chief_desk` | 与房间总管对话，并带上总管角色上下文 |
+
+### 独立验收与任务工作目录
+
+任务不再允许 owner 自己标完成：
+
+```text
+queued → running → in_review → done
+                    ↘ changes (最多 3 轮) → blocked
+                    ↘ needs_approval → 人工批准 → done
+```
+
+- `team_task_create` 可填 `acceptance_criteria`、`reviewer_bot_id`、`needs_approval`；
+- owner 用 `team_task_artifact` 登记真实文件，再用 `team_task_submit_review` 提交；
+- reviewer 不能是 owner，用 `team_task_review` 给出 `approve / changes / reject`；
+- 退回会自动唤醒 owner 返工；3 次不通过 → `blocked`；
+- `needs_approval` 的任务在面板里由人「批准完成 / 拒绝返工」；
+- 每个任务在 `workspace/tasks/<task-id>/` 下独立运行，任务 Session 的 cwd 指向该目录；artifact 不能越界，文件必须真实存在。
+
+### 每个 Bot 用不同模型
+
+Bot 画像的 `model` 是 `provider/model`（例如 `openai/gpt-6.1-sol`、`qwen/qwen3-max`）。Runtime 建好该 Bot 的真实 Session 后会调用 `sessionController.selectModel`，因此房间、私聊和任务 Session 都跑在这条路由上；改画像后下一轮生效，删空则回到部署默认模型。provider 路由在 DSH 的 **设置 → 模型** 里配置（`llm-pi-ai` 的自定义模型 API）；没配的路由会直接报 `cannot use model`，不会悄悄回退。
+
+面板的 Bot 抽屉里可以直接填模型，输入框会带出 `/dsh-team-bot/api/models` 返回的当前模型目录；Bot 列表也会显示每个 Bot 的模型。
+
+### 会话与超时
+
+- **房间/私聊**共用一个长期 Session，适合连续讨论同一个项目。
+- **每个任务一个 Session**：`team_task_assign`、`team_handoff`、面板任务都按 `taskId` 记住自己的 Session。第二次审查是另一个任务，会自动从干净上下文开始，不会锚在上一轮的结论上；同一个任务重跑才复用原 Session。每个 Bot 最多保留 30 个任务 Session。
+- **`team_bot_reset`**：需要彻底重来时清空该 Bot 的房间和任务 Session，画像、模型、workspace 不变。
+- **主 Bot 与子 Bot 分开配置**：`timeoutMs`（默认 `900000`）管子 Bot，`mainTimeoutMs`（默认 `1800000`）管主 Bot。
+- **委派暂停**：主 Bot 调用 `team_task_assign`、`team_handoff`、`team_room_ask`、`team_dm_ask`、`team_chief_desk`、`team_compose` 期间，自己的计时器会暂停，子 Bot 返回后再续上。所以 20 分钟的审查不会被主 Bot 的 15 分钟预算掐断，你也不用判断任务长短。
+- 面板的 HTTP 请求按 `max(timeoutMs, mainTimeoutMs) + 60s` 等待。
+
+```yaml
+- id: team-bot
+  config:
+    timeoutMs: 900000        # 子 Bot 单轮预算
+    mainTimeoutMs: 1800000   # 主 Bot 单轮预算
+```
 
 ### 一轮消息怎么走
 
@@ -133,6 +184,8 @@ Bot 画像会持久化 `sessionId`，所以下一条房间消息会继续同一�
 ### Web 面板
 
 点击左侧栏 **团队群组**，或打开 **设置 → 团队群组**。房间按团队分组，可折叠，也可用搜索框过滤；页面包含成员 chips、带 Bot 头像的时间线、输入框（输入 `@` 可直接选成员）、带 Bot 搜索的建房表单，以及房间/团队双 tab 的记忆抽屉。**管理** 可以改成员和总管、重命名团队，也可以删除房间或整个团队（带确认）。
+
+面板右上角的 **并排** 按钮会把控制台停靠到会话的 **右侧栏**，和聊天同时显示（右侧栏宽度可拖）；右侧栏的「+」引导页里也有 **团队群组** 一项。右侧栏只在有会话时存在，停靠后用的是紧凑布局。
 
 手机窄屏（小于 720px）下，房间列表变成带遮罩的抽屉，聊天占满宽度，顶部按钮自动换行，记忆/管理/AI 建队/新建房间变成底部弹层；输入框会避开 iPhone 底部安全区。
 

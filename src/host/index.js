@@ -21,6 +21,8 @@ export const inject = ['tools', 'sessionController', 'webServer', 'approval', 'a
 export const Config = z.object({
   dataDir: z.string().default(''),
   workspaceRoot: z.string().default(''),
+  timeoutMs: z.number().default(900_000),
+  mainTimeoutMs: z.number().default(1_800_000),
 })
 
 /**
@@ -37,8 +39,14 @@ export function apply(ctx, config = {}) {
     ? config.workspaceRoot
     : path.join(dataDir, 'workspace')
   mkdirSync(workspaceRoot, { recursive: true })
+  const timeoutMs = Number.isInteger(config.timeoutMs) && config.timeoutMs >= 60_000
+    ? config.timeoutMs
+    : 900_000
+  const mainTimeoutMs = Number.isInteger(config.mainTimeoutMs) && config.mainTimeoutMs >= 60_000
+    ? config.mainTimeoutMs
+    : 1_800_000
   const store = new TeamStore(dataDir)
-  const runtime = new BotRuntime(ctx, store, { workspaceRoot })
+  const runtime = new BotRuntime(ctx, store, { workspaceRoot, timeoutMs, mainTimeoutMs })
   const approvalBridge = installToolApprovalBridge(ctx, store)
   const disposers = []
   for (const definition of createTools(store, runtime)) disposers.push(ctx.tools.register(definition))

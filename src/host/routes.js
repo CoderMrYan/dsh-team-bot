@@ -73,6 +73,36 @@ export function registerRoutes(ctx, store, runtime, approvalBridge) {
           })
           return
         }
+        if (parts[0] === 'models' && parts.length === 1 && req.method === 'GET') {
+          let catalog
+          try {
+            catalog = await ctx.sessionController.modelCatalog()
+          } catch (error) {
+            sendJson(res, 200, {
+              models: [],
+              error: error instanceof Error ? error.message : String(error),
+            })
+            return
+          }
+          const models = []
+          for (const group of catalog?.groups ?? []) {
+            for (const model of group.models ?? []) {
+              models.push({
+                ref: `${group.id}/${model.id}`,
+                provider: group.id,
+                providerName: group.name ?? group.id,
+                model: model.id,
+                name: model.name ?? model.id,
+              })
+            }
+          }
+          sendJson(res, 200, {
+            models,
+            default: catalog?.default,
+            failures: catalog?.failures ?? [],
+          })
+          return
+        }
         if (parts[0] === 'main' && parts.length === 1 && req.method === 'GET') {
           sendJson(res, 200, await commandState(store))
           return
@@ -191,7 +221,10 @@ export function registerRoutes(ctx, store, runtime, approvalBridge) {
           sendJson(res, 200, await store.createTask({
             title: body.title,
             brief: body.brief,
+            acceptanceCriteria: body.acceptance_criteria,
             ownerBotId: body.owner_bot_id,
+            reviewerBotId: body.reviewer_bot_id,
+            needsApproval: body.needs_approval === true,
             roomId: body.room_id,
             teamId: body.team_id,
             parentId: body.parent_id,
@@ -209,6 +242,9 @@ export function registerRoutes(ctx, store, runtime, approvalBridge) {
             status: body.status,
             progress: body.progress,
             ownerBotId: body.owner_bot_id,
+            reviewerBotId: body.reviewer_bot_id,
+            acceptanceCriteria: body.acceptance_criteria,
+            needsApproval: body.needs_approval,
             roomId: body.room_id,
             currentStep: body.current_step,
           })
@@ -218,6 +254,84 @@ export function registerRoutes(ctx, store, runtime, approvalBridge) {
               taskId: task.status === 'blocked' ? task.id : '',
               action: body.current_step ?? task.status,
             })
+          }
+          sendJson(res, 200, task)
+          return
+        }
+        if (parts[0] === 'tasks' && parts[1] !== undefined && parts[2] === 'submit-review' && req.method === 'POST') {
+          const body = await readJson(req)
+          const reviewed = await store.submitTaskReview(parts[1], {
+            actorBotId: body.bot_id ?? store.getTask(parts[1]).ownerBotId,
+            summary: body.summary,
+          })
+          await store.recordActivity({
+            botId: reviewed.ownerBotId,
+            taskId: reviewed.id,
+            kind: 'review',
+            label: '提交独立验收',
+            detail: body.summary ?? '',
+            status: 'done',
+          })
+          sendJson(res, 200, reviewed)
+          return
+        }
+        if (parts[0] === 'tasks' && parts[1] !== undefined && parts[2] === 'review' && req.method === 'POST') {
+          const body = await readJson(req)
+          const reviewed = await store.reviewTask(parts[1], {
+            reviewerBotId: body.reviewer_bot_id,
+            verdict: body.verdict,
+            notes: body.notes,
+          })
+          await store.recordActivity({
+            botId: reviewed.reviewedBy,
+            taskId: reviewed.id,
+            kind: 'review',
+            label: body.verdict === 'approve' ? '验收通过' : body.verdict === 'changes' ? '验收退回' : '验收拒绝',
+            detail: body.notes ?? '',
+            status: body.verdict === 'approve' ? 'done' : 'error',
+          })
+          if (body.verdict === 'changes' && reviewed.status === 'running' && reviewed.ownerBotId !== '') {
+            void assignTask(store, runtime, {
+              taskId: reviewed.id,
+              botId: reviewed.ownerBotId,
+              instruction: `验收退回：${body.notes ?? ''}`,
+            }).catch(() => undefined)
+          }
+          sendJson(res, 200, reviewed)
+          return
+        }
+        if (parts[0] === 'tasks' && parts[1] !== undefined && parts[2] === 'approve' && req.method === 'POST') {
+          const body = await readJson(req)
+          const task = await store.approveTask(parts[1], { actor: body.actor ?? 'human', notes: body.notes })
+          if (task.ownerBotId !== '') await store.setPresence(task.ownerBotId, { status: 'idle', taskId: '', action: '任务完成' }).catch(() => undefined)
+          await store.recordActivity({
+            botId: task.ownerBotId,
+            taskId: task.id,
+            kind: 'approval',
+            label: '人工批准任务完成',
+            detail: body.notes ?? '',
+            status: 'done',
+          })
+          sendJson(res, 200, task)
+          return
+        }
+        if (parts[0] === 'tasks' && parts[1] !== undefined && parts[2] === 'reject' && req.method === 'POST') {
+          const body = await readJson(req)
+          const task = await store.rejectTask(parts[1], { actor: body.actor ?? 'human', notes: body.notes })
+          await store.recordActivity({
+            botId: task.ownerBotId,
+            taskId: task.id,
+            kind: 'approval',
+            label: '人工拒绝任务完成',
+            detail: body.notes ?? '',
+            status: 'error',
+          })
+          if (task.status === 'running' && task.ownerBotId !== '') {
+            void assignTask(store, runtime, {
+              taskId: task.id,
+              botId: task.ownerBotId,
+              instruction: `人工拒绝：${body.notes ?? ''}`,
+            }).catch(() => undefined)
           }
           sendJson(res, 200, task)
           return
@@ -281,12 +395,17 @@ export function registerRoutes(ctx, store, runtime, approvalBridge) {
             role: body.role,
             title: body.title,
             persona: body.persona,
+            model: body.model,
             workspace: body.workspace,
           }))
           return
         }
         if (parts[0] === 'bots' && parts[1] !== undefined && req.method === 'DELETE') {
           sendJson(res, 200, await store.deleteBot(parts[1]))
+          return
+        }
+        if (parts[0] === 'bots' && parts[1] !== undefined && parts[2] === 'reset' && req.method === 'POST') {
+          sendJson(res, 200, await store.resetBotSessions(parts[1]))
           return
         }
         if (parts[0] === 'templates' && req.method === 'GET') {
@@ -421,7 +540,7 @@ export function registerRoutes(ctx, store, runtime, approvalBridge) {
               sendJson(res, 400, { error: 'text is required' })
               return
             }
-            const result = await askDirect(store, runtime, { botId, text }, AbortSignal.timeout(300_000))
+            const result = await askDirect(store, runtime, { botId, text }, AbortSignal.timeout(runtime.maxTimeoutMs + 60_000))
             sendJson(res, 200, result)
             return
           }
@@ -509,7 +628,7 @@ export function registerRoutes(ctx, store, runtime, approvalBridge) {
             return
           }
           const mentions = Array.isArray(body.mentions) ? body.mentions.map(String) : []
-          const result = await askRoom(store, runtime, { roomId, text, mentions }, AbortSignal.timeout(300_000))
+          const result = await askRoom(store, runtime, { roomId, text, mentions }, AbortSignal.timeout(runtime.maxTimeoutMs + 60_000))
           sendJson(res, 200, result)
           return
         }

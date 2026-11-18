@@ -152,11 +152,18 @@ export async function assignTask(store, runtime, input, signal) {
   await store.init()
   const task = store.getTask(input.taskId)
   const bot = store.getBot(input.botId)
+  if (task.reviewerBotId !== '' && task.reviewerBotId === bot.id) {
+    throw new Error('the reviewer cannot be the task owner')
+  }
   const room = task.roomId === '' ? undefined : store.getRoom(task.roomId)
+  const taskWorkspace = typeof runtime.ensureTaskWorkspace === 'function'
+    ? await runtime.ensureTaskWorkspace(task.id)
+    : task.workspace
   await store.updateTask(task.id, {
     ownerBotId: bot.id,
     status: 'running',
     currentStep: '已被主 Bot 派发',
+    ...(taskWorkspace === undefined || taskWorkspace === '' ? {} : { workspace: taskWorkspace }),
   })
   await store.addTaskStep(task.id, {
     kind: 'handoff',
@@ -170,8 +177,13 @@ export async function assignTask(store, runtime, input, signal) {
   const teamMemory = task.teamId === '' ? undefined : await store.teamMemory(task.teamId)
   let replyText = ''
   try {
-    const prompt = buildTaskPrompt(bot, task, room, { roomMemory, botMemory, teamMemory, query: task.brief || task.title })
-    replyText = (await runtime.ask(bot, prompt, signal, { taskId: task.id, roomId: task.roomId, taskSession: true })).trim()
+    const prompt = buildTaskPrompt(bot, store.getTask(task.id), room, { roomMemory, botMemory, teamMemory, query: task.brief || task.title })
+    replyText = (await runtime.ask(bot, prompt, signal, {
+      taskId: task.id,
+      roomId: task.roomId,
+      taskSession: true,
+      workspace: taskWorkspace,
+    })).trim()
     if (replyText !== '' && replyText !== '[PASS]') {
       if (room !== undefined) {
         await store.postMessage({
@@ -188,8 +200,8 @@ export async function assignTask(store, runtime, input, signal) {
       }
     }
     const latest = store.getTask(task.id)
-    if (!['done', 'failed', 'blocked'].includes(latest.status)) {
-      await store.updateTask(task.id, { status: 'waiting', currentStep: '本轮结束，等待验收' })
+    if (latest.status === 'running') {
+      await store.updateTask(task.id, { status: 'waiting', currentStep: '本轮结束，等待提交验收' })
     }
     await store.setPresence(bot.id, { status: 'idle', taskId: '', action: '空闲' })
     return { task: store.getTask(task.id), reply: replyText }

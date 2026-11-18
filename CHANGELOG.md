@@ -1,5 +1,65 @@
 # Changelog
 
+## 0.18.0 — 2026-11-18
+
+### Added
+
+- **Independent task review**: new `in_review` and `needs_approval` states, `acceptance_criteria`, `reviewer_bot_id`, `review_attempts`, review notes and reviewer metadata. Owners cannot review their own tasks; three failed rounds block the task.
+- **`team_task_submit_review` and `team_task_review`**: the owner registers artifacts and submits; the reviewer approves, requests changes, or rejects. Changes automatically wake the owner for rework.
+- **Per-task isolated workspaces**: `workspace/tasks/<task-id>` is created on assignment and passed as the task Session cwd. `team_task_artifact` now rejects paths outside it and requires the file to exist.
+- **Human approval gate**: reviewed tasks marked `needs_approval` wait for the panel's 「批准完成 / 拒绝返工」 action; direct `done` is rejected until review and required approval pass.
+- Panel task detail shows acceptance criteria, reviewer, review state, rework count, review notes and workspace, with human approval buttons.
+
+### Changed
+
+- `team_task_create` accepts `acceptance_criteria`, `reviewer_bot_id` and `needs_approval`; `team_task_update` accepts the review fields but cannot bypass the done gate.
+- Main/task prompts now require `team_task_submit_review` instead of self-marking done.
+
+## 0.17.0 — 2026-11-17
+
+### Added
+
+- **Right-sidebar tab**: the team console can now dock in the conversation's right sidebar as a `team-bot` tab, so chat and the console are visible side by side. The console header gains a 「并排」 button (shown when the right sidebar is mounted and a Session is on screen), and the right sidebar's add-guide lists 「团队群组」. The docked body renders the same console in compact layout.
+- The client plugin now injects `sidebarRight` and `sidebarRightTabs`, which the standard web shell mounts.
+
+## 0.16.0 — 2026-11-17
+
+### Added
+
+- **Separate budgets for the Main Bot and sub-bots**: `timeoutMs` (default `900000`) applies to sub-bot turns and `mainTimeoutMs` (default `1800000`) to the Main Bot. Configure both under `dsh-team-bot` in the profile's `cordis.patch.yml`.
+- **Delegation pause**: while a `team_task_assign`, `team_handoff`, `team_room_ask`, `team_dm_ask`, `team_chief_desk` or `team_compose` tool call is in flight, the calling turn's timer is paused and re-armed when the child returns. A 20-minute review no longer gets killed by the parent's 15-minute budget.
+
+### Changed
+
+- Panel HTTP asks wait for `max(timeoutMs, mainTimeoutMs) + 60s`.
+- Turn timeouts are now driven by a per-turn `AbortController`, so the same timer both cancels the Session and ends the wait.
+
+## 0.15.0 — 2026-11-17
+
+### Added
+
+- **Per-task Sessions**: every durable task now runs in its own Session (`bot.taskSessions[taskId]`), reused only when the same task runs again. Room and private chats keep their long-lived Session. A second review task therefore starts from a clean context instead of anchoring on the first task's answer. Up to 30 task Sessions are kept per bot.
+- `team_bot_reset` tool and `POST /dsh-team-bot/api/bots/:id/reset`: forget a bot's room Session and all task Sessions without touching its profile, model or workspace.
+- Config `timeoutMs` (default `900000`, minimum `60000`): per-turn wall-clock budget for every bot turn, including reviews. Panel HTTP asks now wait `timeoutMs + 60s`.
+
+### Changed
+
+- Default turn timeout raised from 3 to 15 minutes; HTTP ask routes no longer cap at 5 minutes.
+
+## 0.14.0 — 2026-11-16
+
+### Added
+
+- **Per-bot model routing**: a profile's `model` setting (`provider/model`, for example `openai/gpt-6.1-sol`) now binds to that bot's real Session through `sessionController.selectModel`, for room/private turns and workspace task Sessions alike. Changing the setting re-applies on the next turn; a missing provider route fails loudly with `bot <name>: cannot use model ...` instead of silently falling back to the deployment default.
+- `team_bot_update` tool: change name, role, persona, model or workspace of an existing bot. An empty `model` clears the route back to the deployment default.
+- `GET /dsh-team-bot/api/models` exposes the live model catalog as flat `provider/model` refs, plus the deployment default and per-provider failures.
+- Bot drawer: model input with a catalog-backed datalist; the roster and drawer show the effective model.
+
+### Changed
+
+- `team_bot_create` validates `model` as `provider/model`; `PATCH /bots/:id` accepts `model`.
+- New test file `test/model.test.js` covers route parsing, one-time binding, re-binding on change, and provider failures.
+
 ## 0.13.7 — 2026-11-10
 
 ### Added

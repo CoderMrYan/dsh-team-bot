@@ -62,10 +62,14 @@ export function registerRoutes(ctx, store, runtime, approvalBridge, scheduler) {
         if (parts[0] === 'state' && req.method === 'GET') {
           await store.init()
           const main = await ensureMain(store)
+          const project = url.searchParams.get('project') ?? ''
+          const roomFilter = project === '' ? {} : { projectId: project }
+          const taskFilter = project === '' ? {} : { projectId: project }
           sendJson(res, 200, {
+            project,
             bots: store.listBots(),
-            rooms: store.listRooms(),
-            tasks: store.listTasks(),
+            rooms: store.listRooms(roomFilter),
+            tasks: store.listTasks(taskFilter),
             teamCards: store.listTeamCards(),
             heartbeat: store.getHeartbeat(),
             presence: store.listPresence(),
@@ -141,7 +145,10 @@ export function registerRoutes(ctx, store, runtime, approvalBridge, scheduler) {
             sendJson(res, 400, { error: 'text is required' })
             return
           }
-          sendJson(res, 200, await askMain(store, runtime, { text }))
+          sendJson(res, 200, await askMain(store, runtime, {
+            text,
+            projectId: typeof body.project_id === 'string' ? body.project_id : '',
+          }))
           return
         }
         if (parts[0] === 'approvals' && parts.length === 1 && req.method === 'GET') {
@@ -216,6 +223,7 @@ export function registerRoutes(ctx, store, runtime, approvalBridge, scheduler) {
               ownerBotId: url.searchParams.get('owner') ?? undefined,
               roomId: url.searchParams.get('room') ?? undefined,
               status: url.searchParams.get('status') ?? undefined,
+              projectId: url.searchParams.get('project') ?? undefined,
             }),
           })
           return
@@ -230,6 +238,7 @@ export function registerRoutes(ctx, store, runtime, approvalBridge, scheduler) {
             ownerBotId: body.owner_bot_id,
             reviewerBotId: body.reviewer_bot_id,
             needsApproval: body.needs_approval === true,
+            projectId: body.project_id,
             roomId: body.room_id,
             teamId: body.team_id,
             parentId: body.parent_id,
@@ -495,7 +504,7 @@ export function registerRoutes(ctx, store, runtime, approvalBridge, scheduler) {
           return
         }
         if (parts[0] === 'brief' && req.method === 'GET') {
-          sendJson(res, 200, await buildTeamBrief(store))
+          sendJson(res, 200, await buildTeamBrief(store, { projectId: url.searchParams.get('project') ?? '' }))
           return
         }
         if (parts[0] === 'team-cards' && parts[1] === undefined && req.method === 'GET') {
@@ -585,6 +594,7 @@ export function registerRoutes(ctx, store, runtime, approvalBridge, scheduler) {
           const room = await store.createRoom({
             name: typeof body.name === 'string' ? body.name : '',
             members: Array.isArray(body.members) ? body.members.map(String) : [],
+            projectId: typeof body.project_id === 'string' ? body.project_id : '',
             policy: { replyMode: body.reply_mode },
           })
           sendJson(res, 200, room)
@@ -599,7 +609,8 @@ export function registerRoutes(ctx, store, runtime, approvalBridge, scheduler) {
           const botId = parts[1]
           if (botId !== undefined && parts[2] === 'messages' && req.method === 'GET') {
             const limit = Number(url.searchParams.get('limit') ?? 50)
-            sendJson(res, 200, { messages: await store.directHistory(botId, limit) })
+            const projectId = url.searchParams.get('project') ?? ''
+            sendJson(res, 200, { messages: await store.directHistory(botId, limit, projectId) })
             return
           }
           if (botId !== undefined && parts[2] === 'ask' && req.method === 'POST') {
@@ -609,7 +620,11 @@ export function registerRoutes(ctx, store, runtime, approvalBridge, scheduler) {
               sendJson(res, 400, { error: 'text is required' })
               return
             }
-            const result = await askDirect(store, runtime, { botId, text }, AbortSignal.timeout(runtime.maxTimeoutMs + 60_000))
+            const result = await askDirect(store, runtime, {
+              botId,
+              text,
+              projectId: typeof body.project_id === 'string' ? body.project_id : '',
+            }, AbortSignal.timeout(runtime.maxTimeoutMs + 60_000))
             sendJson(res, 200, result)
             return
           }

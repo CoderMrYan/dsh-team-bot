@@ -4,7 +4,7 @@ Native multi-agent group chat for [DeepSeek Harness](https://github.com/deepseek
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-> Status: **0.23.1** — left-sidebar entry opens the team console side by side with the conversation, pre-execution human approval for high-risk tasks plus read-only reviewer sessions, Team Cards with layered role/team context, token/wake accounting and heartbeat briefs, task cancellation, background task dispatch with a scheduler and global concurrency cap, independent task review, per-task isolated workspaces with validated artifacts, reviewer identity checks, right-sidebar docking, separate Main-Bot/sub-bot turn budgets, per-bot model routing, per-task Sessions, persistent Main Bot command center, durable tasks/steps/artifacts, live activity/presence, asynchronous handoff, human approvals for destructive actions, tool-stall detection and stop/cancel, watchdog alerts, plus rooms, memory and mobile UI. Install from GitHub; npm publish is optional and not done.
+> Status: **0.24.0** — DSH workspace project scoping, left-sidebar side-by-side entry, pre-execution human approval for high-risk tasks plus read-only reviewer sessions, Team Cards with layered role/team context, token/wake accounting and heartbeat briefs, task cancellation, background task dispatch with a scheduler and global concurrency cap, independent task review, per-task isolated workspaces with validated artifacts, reviewer identity checks, right-sidebar docking, separate Main-Bot/sub-bot turn budgets, per-bot model routing, per-task Sessions, persistent Main Bot command center, durable tasks/steps/artifacts, live activity/presence, asynchronous handoff, human approvals for destructive actions, tool-stall detection and stop/cancel, watchdog alerts, plus rooms, memory and mobile UI. Install from GitHub; npm publish is optional and not done.
 
 ## Local workspace and safety boundary
 
@@ -142,7 +142,16 @@ A profile's `model` is a `provider/model` route (for example `openai/gpt-6.1-sol
 - **Role context**: bot name/role/persona plus `skills`, injected on every turn.
 - **Team context**: Team Card `rules`, shared `skills`, lead/reviewer/publisher and publish/merge/spend/external approval policy.
 - **Task context**: ticket brief, acceptance criteria, isolated workspace and artifacts.
-- **Project context**: Team Card rules can hold style guides, forbidden changes and known pitfalls.
+- **Project context**: Team Card rules hold general standards; project facts/decisions live in project memory and apply only to the current DSH workspace.
+
+### Project (DSH workspace) scoping
+
+- Team Cards, bot roles and team skills stay global.
+- Tasks, rooms, task artifacts, room/private long-lived Sessions and the Main Bot's project Sessions are scoped by workspace.
+- Project memory lives under `memory/project/`; project-private bot memory under `memory/project-bot/`. Retrieval injects only the current project plus global team rules/persona.
+- Task workspaces are `<workspace>/.dsh-team/tasks/<task-id>`.
+- The panel uses the current Session `cwd` as the project path; `/state`, `/main/ask`, room creation and DMs send `project`.
+- Without an active Session (for example Settings) the console is an admin-wide view.
 
 `team_compose` creates a Team Card and recognises review/test roles as the reviewer. New tasks automatically use the card reviewer when none is passed. `team_brief` / `GET /brief` reports task states, attention items, stale running tasks, token usage and wake counts. The heartbeat only writes activity/notifications and never calls a model. Each task drawer shows tokens and wakes; `team_task_cancel` cancels queued or running work.
 

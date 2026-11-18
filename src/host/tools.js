@@ -24,8 +24,24 @@ function callerBot(store, exec) {
   if (sessionId === '') return undefined
   return store.listBots({ includeHidden: true }).find((bot) => {
     if (String(bot.sessionId) === sessionId || String(bot.taskSessionId) === sessionId) return true
-    return Object.values(bot.taskSessions ?? {}).some((id) => String(id) === sessionId)
+    if (Object.values(bot.taskSessions ?? {}).some((id) => String(id) === sessionId)) return true
+    return Object.values(bot.projectSessions ?? {}).some((id) => String(id) === sessionId)
   })
+}
+
+/** @returns {string} the project scope of the calling Agent Session. */
+function callerProject(runtime, exec) {
+  return typeof runtime?.projectForSession === 'function' ? runtime.projectForSession(exec?.agent?.id) : ''
+}
+
+/** Reject a tool call that addresses a task from another project. */
+function assertTaskProject(store, runtime, exec, taskId) {
+  const projectId = callerProject(runtime, exec)
+  if (projectId === '') return
+  const task = store.getTask(taskId)
+  if (task.projectId !== '' && task.projectId !== projectId) {
+    throw new Error('task belongs to another project')
+  }
 }
 
 /** Throw when a tool argument claims to be a different bot than the caller. */
@@ -87,8 +103,8 @@ export function createTools(store, runtime, scheduler) {
       description: 'Return a deterministic team brief: task counts, items needing attention, stale running tasks, token usage and wakes. No model calls.',
       parameters: {},
       output: jsonOutput(),
-      async execute() {
-        return await buildTeamBrief(store)
+      async execute(_args, exec) {
+        return await buildTeamBrief(store, { projectId: callerProject(runtime, exec) })
       },
     }),
 
@@ -155,10 +171,11 @@ export function createTools(store, runtime, scheduler) {
         needs_approval: { type: 'boolean', description: 'True when a human must approve after review (publish, deploy, spend, destructive external action).' },
         room_id: { type: 'string', description: 'Optional room id for the result.' },
         team_id: { type: 'string', description: 'Optional team id.' },
+        project_id: { type: 'string', description: 'Project/workspace path; defaults to the current project.' },
         parent_id: { type: 'string', description: 'Optional parent task id for subtasks.' },
       },
       output: jsonOutput(),
-      async execute(args) {
+      async execute(args, exec) {
         return await store.createTask({
           title: args.title,
           brief: args.brief,
@@ -167,6 +184,7 @@ export function createTools(store, runtime, scheduler) {
           ownerBotId: args.owner_bot_id,
           reviewerBotId: args.reviewer_bot_id,
           needsApproval: args.needs_approval === true,
+          projectId: args.project_id ?? callerProject(runtime, exec),
           roomId: args.room_id,
           teamId: args.team_id,
           parentId: args.parent_id,
@@ -186,6 +204,7 @@ export function createTools(store, runtime, scheduler) {
       output: jsonOutput(),
       timeoutMs: 600_000,
       async execute(args, exec) {
+        assertTaskProject(store, runtime, exec, args.task_id)
         return await assignTask(store, runtime, {
           taskId: args.task_id,
           botId: args.bot_id,
@@ -252,7 +271,8 @@ export function createTools(store, runtime, scheduler) {
         current_step: { type: 'string', description: 'Short current step label.' },
       },
       output: jsonOutput(),
-      async execute(args) {
+      async execute(args, exec) {
+        assertTaskProject(store, runtime, exec, args.task_id)
         const task = await store.updateTask(args.task_id, {
           status: args.status,
           progress: args.progress,
@@ -287,6 +307,7 @@ export function createTools(store, runtime, scheduler) {
       output: jsonOutput(),
       async execute(args, exec) {
         assertCaller(store, exec, args.bot_id)
+        assertTaskProject(store, runtime, exec, args.task_id)
         const progress = args.status === 'done' ? 100 : args.progress
         await store.updateTask(args.task_id, {
           status: args.status,
@@ -308,7 +329,7 @@ export function createTools(store, runtime, scheduler) {
         })
         const owner = store.getBot(args.bot_id)
         const task = store.getTask(args.task_id)
-        await notifyMain(store, `[${args.status === 'blocked' ? '阻塞' : args.status === 'done' ? '完成' : '进度'}] ${owner.name} · ${task.title}\n${args.message ?? ''}`)
+        await notifyMain(store, `[${args.status === 'blocked' ? '阻塞' : args.status === 'done' ? '完成' : '进度'}] ${owner.name} · ${task.title}\n${args.message ?? ''}`, task.projectId)
         return task
       },
     }),
@@ -325,6 +346,7 @@ export function createTools(store, runtime, scheduler) {
       output: jsonOutput(),
       async execute(args, exec) {
         assertCaller(store, exec, args.bot_id)
+        assertTaskProject(store, runtime, exec, args.task_id)
         const task = store.getTask(args.task_id)
         for (const artifactPath of args.artifact_paths ?? []) {
           const resolved = await runtime.resolveTaskArtifact(task.id, artifactPath)
@@ -377,7 +399,7 @@ export function createTools(store, runtime, scheduler) {
             }).catch(() => undefined)
           })
         }
-        await notifyMain(store, `[待验收] ${store.getBot(args.bot_id).name} · ${reviewed.title}\n${args.summary ?? ''}`)
+        await notifyMain(store, `[待验收] ${store.getBot(args.bot_id).name} · ${reviewed.title}\n${args.summary ?? ''}`, reviewed.projectId)
         return reviewed
       },
     }),
@@ -394,6 +416,7 @@ export function createTools(store, runtime, scheduler) {
       output: jsonOutput(),
       async execute(args, exec) {
         assertCaller(store, exec, args.reviewer_bot_id)
+        assertTaskProject(store, runtime, exec, args.task_id)
         const reviewed = await store.reviewTask(args.task_id, {
           reviewerBotId: args.reviewer_bot_id,
           verdict: args.verdict,
@@ -428,7 +451,7 @@ export function createTools(store, runtime, scheduler) {
             }).catch(() => undefined)
           })
         }
-        await notifyMain(store, `[${args.verdict === 'approve' ? '验收通过' : '验收退回'}] ${reviewed.title}\n${args.notes ?? ''}`)
+        await notifyMain(store, `[${args.verdict === 'approve' ? '验收通过' : '验收退回'}] ${reviewed.title}\n${args.notes ?? ''}`, reviewed.projectId)
         return reviewed
       },
     }),
@@ -447,6 +470,7 @@ export function createTools(store, runtime, scheduler) {
         if (caller !== undefined && caller.isMain !== true && caller.id !== task.ownerBotId) {
           throw new Error('only the task owner or the Main Bot can cancel this task')
         }
+        assertTaskProject(store, runtime, exec, args.task_id)
         if (scheduler !== undefined) return await scheduler.cancel(task.id, args.reason)
         return await store.cancelTask(task.id, args.reason)
       },
@@ -481,7 +505,8 @@ export function createTools(store, runtime, scheduler) {
         name: { type: 'string', description: 'Optional display name.' },
       },
       output: jsonOutput(),
-      async execute(args) {
+      async execute(args, exec) {
+        assertTaskProject(store, runtime, exec, args.task_id)
         const resolved = await runtime.resolveTaskArtifact(args.task_id, args.path)
         const info = await stat(resolved.absolute)
         if (!info.isFile()) throw new Error('artifact path must point to a file')
@@ -501,14 +526,17 @@ export function createTools(store, runtime, scheduler) {
         owner_bot_id: { type: 'string', description: 'Filter by owner bot id.' },
         room_id: { type: 'string', description: 'Filter by room id.' },
         status: { type: 'string', description: 'Filter by status.' },
+        project_id: { type: 'string', description: 'Filter by project; defaults to the current project.' },
       },
       output: jsonOutput(),
-      async execute(args) {
+      async execute(args, exec) {
+        const projectId = args.project_id ?? callerProject(runtime, exec)
         return {
           tasks: store.listTasks({
             ownerBotId: args.owner_bot_id,
             roomId: args.room_id,
             status: args.status,
+            projectId,
           }),
         }
       },
@@ -521,7 +549,8 @@ export function createTools(store, runtime, scheduler) {
         task_id: { type: 'string', required: true, description: 'Task id.' },
       },
       output: jsonOutput(),
-      async execute(args) {
+      async execute(args, exec) {
+        assertTaskProject(store, runtime, exec, args.task_id)
         return await store.getTask(args.task_id)
       },
     }),
@@ -537,11 +566,12 @@ export function createTools(store, runtime, scheduler) {
       },
       output: jsonOutput(),
       timeoutMs: 120_000,
-      async execute(args) {
+      async execute(args, exec) {
         return await composeTeam(store, {
           brief: args.brief,
           templateId: args.template,
           name: args.name,
+          projectId: callerProject(runtime, exec),
         }, runtime)
       },
     }),
@@ -657,12 +687,13 @@ export function createTools(store, runtime, scheduler) {
         hop_limit: { type: 'integer', description: 'Maximum relay hops (0-5, default 2).' },
       },
       output: jsonOutput(),
-      async execute(args) {
+      async execute(args, exec) {
         await store.init()
         return await store.createRoom({
           name: args.name,
           members: args.members,
           chiefId: args.chief_id,
+          projectId: callerProject(runtime, exec),
           policy: {
             replyMode: args.reply_mode,
             maxSpeakers: args.max_speakers,
@@ -756,9 +787,10 @@ export function createTools(store, runtime, scheduler) {
       description: 'List every shared room with its members, chief, and reply policy.',
       parameters: {},
       output: jsonOutput(),
-      async execute() {
+      async execute(_args, exec) {
         await store.init()
-        return { rooms: store.listRooms() }
+        const projectId = callerProject(runtime, exec)
+        return { rooms: store.listRooms(projectId === '' ? {} : { projectId }) }
       },
     }),
 
@@ -805,6 +837,11 @@ export function createTools(store, runtime, scheduler) {
       output: jsonOutput(),
       timeoutMs: 600_000,
       async execute(args, exec) {
+        const projectId = callerProject(runtime, exec)
+        const room = store.getRoom(args.room_id)
+        if (projectId !== '' && room.projectId !== '' && room.projectId !== projectId) {
+          throw new Error('room belongs to another project')
+        }
         return await askRoom(
           store,
           runtime,
@@ -839,10 +876,14 @@ export function createTools(store, runtime, scheduler) {
         const room = await store.roomMemory(args.room_id)
         const scope = store.getRoom(args.room_id)
         const team = scope.teamId === '' ? undefined : await store.teamMemory(scope.teamId)
-        const bot = typeof args.bot_id === 'string' && args.bot_id !== '' ? await store.botMemory(args.bot_id) : undefined
+        const project = scope.projectId === '' ? undefined : await store.projectMemory(scope.projectId)
+        const bot = typeof args.bot_id === 'string' && args.bot_id !== ''
+          ? await store.botMemory(args.bot_id, scope.projectId)
+          : undefined
         return {
           room,
           ...(team === undefined ? {} : { team }),
+          ...(project === undefined ? {} : { project }),
           ...(bot === undefined ? {} : { bot }),
         }
       },
@@ -856,7 +897,7 @@ export function createTools(store, runtime, scheduler) {
         room_id: { type: 'string', required: true, description: 'Room id.' },
         text: { type: 'string', required: true, description: 'The fact to remember.' },
         key: { type: 'string', description: 'Stable key; reusing it supersedes the old atom.' },
-        scope: { type: 'string', enum: ['room', 'team', 'bot'], description: 'room (shared), team (shared across the team), or bot (private); defaults to room.' },
+        scope: { type: 'string', enum: ['room', 'team', 'bot', 'project'], description: 'room (shared), team (shared across the team), project (current workspace), or bot (private); defaults to room.' },
         team_id: { type: 'string', description: 'Required when scope=team.' },
         bot_id: { type: 'string', description: 'Required when scope=bot.' },
         importance: { type: 'number', description: '0-1 importance, default 0.5.' },
@@ -870,13 +911,19 @@ export function createTools(store, runtime, scheduler) {
           importance: args.importance,
           source: 'tool',
         })
+        const room = store.getRoom(args.room_id)
+        const projectId = room.projectId
         if (args.scope === 'team') {
           if (typeof args.team_id !== 'string' || args.team_id === '') throw new Error('team_id is required when scope=team')
           return await store.rememberTeam(args.team_id, atom)
         }
+        if (args.scope === 'project') {
+          if (projectId === '') throw new Error('this room has no project')
+          return await store.rememberProject(projectId, atom)
+        }
         if (args.scope === 'bot') {
           if (typeof args.bot_id !== 'string' || args.bot_id === '') throw new Error('bot_id is required when scope=bot')
-          return await store.rememberBot(args.bot_id, atom)
+          return await store.rememberBot(args.bot_id, atom, projectId)
         }
         return await store.rememberRoom(args.room_id, atom)
       },
@@ -888,20 +935,25 @@ export function createTools(store, runtime, scheduler) {
       parameters: {
         room_id: { type: 'string', required: true, description: 'Room id.' },
         atom_id: { type: 'string', required: true, description: 'Memory atom id from team_room_memory.' },
-        scope: { type: 'string', enum: ['room', 'team', 'bot'], description: 'room (shared), team (shared across the team), or bot (private); defaults to room.' },
+        scope: { type: 'string', enum: ['room', 'team', 'bot', 'project'], description: 'room (shared), team, project, or bot; defaults to room.' },
         team_id: { type: 'string', description: 'Required when scope=team.' },
         bot_id: { type: 'string', description: 'Required when scope=bot.' },
       },
       output: jsonOutput(),
       async execute(args) {
         await store.init()
+        const projectId = store.getRoom(args.room_id).projectId
         if (args.scope === 'team') {
           if (typeof args.team_id !== 'string' || args.team_id === '') throw new Error('team_id is required when scope=team')
           return { memory: await store.forgetTeam(args.team_id, args.atom_id) }
         }
+        if (args.scope === 'project') {
+          if (projectId === '') throw new Error('this room has no project')
+          return { memory: await store.forgetProject(projectId, args.atom_id) }
+        }
         if (args.scope === 'bot') {
           if (typeof args.bot_id !== 'string' || args.bot_id === '') throw new Error('bot_id is required when scope=bot')
-          return { memory: await store.forgetBot(args.bot_id, args.atom_id) }
+          return { memory: await store.forgetBot(args.bot_id, args.atom_id, projectId) }
         }
         return { memory: await store.forgetRoom(args.room_id, args.atom_id) }
       },
@@ -931,21 +983,26 @@ export function createTools(store, runtime, scheduler) {
         room_id: { type: 'string', required: true, description: 'Room id.' },
         atom_id: { type: 'string', required: true, description: 'Memory atom id.' },
         action: { type: 'string', required: true, enum: ['accept', 'reject', 'pending'], description: 'Review decision.' },
-        scope: { type: 'string', enum: ['room', 'team', 'bot'], description: 'room (shared), team (shared across the team), or bot (private); defaults to room.' },
+        scope: { type: 'string', enum: ['room', 'team', 'bot', 'project'], description: 'room (shared), team, project, or bot; defaults to room.' },
         team_id: { type: 'string', description: 'Required when scope=team.' },
         bot_id: { type: 'string', description: 'Required when scope=bot.' },
       },
       output: jsonOutput(),
       async execute(args) {
         await store.init()
+        const projectId = store.getRoom(args.room_id).projectId
         const review = args.action === 'accept' ? 'accepted' : args.action === 'reject' ? 'rejected' : 'pending'
         if (args.scope === 'team') {
           if (typeof args.team_id !== 'string' || args.team_id === '') throw new Error('team_id is required when scope=team')
           return { memory: await store.reviewTeam(args.team_id, args.atom_id, review) }
         }
+        if (args.scope === 'project') {
+          if (projectId === '') throw new Error('this room has no project')
+          return { memory: await store.reviewProject(projectId, args.atom_id, review) }
+        }
         if (args.scope === 'bot') {
           if (typeof args.bot_id !== 'string' || args.bot_id === '') throw new Error('bot_id is required when scope=bot')
-          return { memory: await store.reviewBot(args.bot_id, args.atom_id, review) }
+          return { memory: await store.reviewBot(args.bot_id, args.atom_id, review, projectId) }
         }
         return { memory: await store.reviewRoom(args.room_id, args.atom_id, review) }
       },
@@ -961,7 +1018,11 @@ export function createTools(store, runtime, scheduler) {
       output: jsonOutput(),
       timeoutMs: 600_000,
       async execute(args, exec) {
-        return await askDirect(store, runtime, { botId: args.bot_id, text: args.text }, exec.signal)
+        return await askDirect(store, runtime, {
+          botId: args.bot_id,
+          text: args.text,
+          projectId: callerProject(runtime, exec),
+        }, exec.signal)
       },
     }),
 
@@ -973,8 +1034,8 @@ export function createTools(store, runtime, scheduler) {
         limit: { type: 'integer', description: 'Number of latest messages (1-500, default 50).' },
       },
       output: jsonOutput(),
-      async execute(args) {
-        return { messages: await store.directHistory(args.bot_id, args.limit) }
+      async execute(args, exec) {
+        return { messages: await store.directHistory(args.bot_id, args.limit, callerProject(runtime, exec)) }
       },
     }),
 

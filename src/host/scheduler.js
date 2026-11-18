@@ -111,7 +111,7 @@ export class TaskScheduler {
       detail: String(reason),
       status: 'error',
     })
-    await notifyMain(this.store, `[已取消] ${cancelled.title}${reason ? `\n${reason}` : ''}`).catch(() => undefined)
+    await notifyMain(this.store, `[已取消] ${cancelled.title}${reason ? `\n${reason}` : ''}`, cancelled.projectId).catch(() => undefined)
     return cancelled
   }
 
@@ -143,7 +143,7 @@ export class TaskScheduler {
         detail: finished?.task?.status ?? '',
         status: finished?.task?.status === 'failed' ? 'error' : 'done',
       }).catch(() => undefined)
-      await notifyMain(this.store, `[后台任务] ${finished?.task?.title ?? item.taskId} 已结束，状态 ${finished?.task?.status ?? 'unknown'}`).catch(() => undefined)
+      await notifyMain(this.store, `[后台任务] ${finished?.task?.title ?? item.taskId} 已结束，状态 ${finished?.task?.status ?? 'unknown'}`, finished?.task?.projectId ?? '').catch(() => undefined)
     } catch (error) {
       await this.store.recordActivity({
         botId: item.botId,
@@ -153,7 +153,9 @@ export class TaskScheduler {
         detail: error instanceof Error ? error.message : String(error),
         status: 'error',
       }).catch(() => undefined)
-      await notifyMain(this.store, `[后台任务失败] ${item.taskId}: ${error instanceof Error ? error.message : String(error)}`).catch(() => undefined)
+      let projectId = ''
+      try { projectId = this.store.getTask(item.taskId).projectId } catch { projectId = '' }
+      await notifyMain(this.store, `[后台任务失败] ${item.taskId}: ${error instanceof Error ? error.message : String(error)}`, projectId).catch(() => undefined)
     } finally {
       this.running.delete(item.taskId)
       if (!this.closed) this.drain()

@@ -23,7 +23,9 @@ export async function buildTeamBrief(store, options = {}) {
   await store.init()
   const now = Number.isFinite(options.now) ? options.now : Date.now()
   const staleMs = Number.isInteger(options.staleMs) ? options.staleMs : 1_800_000
-  const tasks = store.listTasks()
+  const tasks = store.listTasks(options.projectId === undefined || options.projectId === ''
+    ? {}
+    : { projectId: String(options.projectId) })
   const counts = {}
   for (const task of tasks) counts[task.status] = (counts[task.status] ?? 0) + 1
   const attention = []

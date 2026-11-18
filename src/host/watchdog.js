@@ -36,7 +36,7 @@ export function startWatchdog(store, runtime, options = {}) {
             action: '长时间没有新进展，等待介入',
           })
         }
-        await notifyMain(store, `[看门狗] 任务「${task.title}」长时间没有新进展，请检查或重新派发。`)
+        await notifyMain(store, `[看门狗] 任务「${task.title}」长时间没有新进展，请检查或重新派发。`, task.projectId)
       }
       for (const task of store.listTasks({ status: ['done', 'failed', 'blocked'] })) {
         alerted.delete(task.id)

@@ -83,6 +83,7 @@ export async function composeTeam(store, input = {}, runtime) {
     chiefId: chief.id,
     teamId,
     teamName,
+    projectId: String(input.projectId ?? ''),
     policy: { replyMode: 'auto', maxSpeakers: 3 },
   }))
 
@@ -100,6 +101,7 @@ export async function composeTeam(store, input = {}, runtime) {
       chiefId,
       teamId,
       teamName,
+      projectId: String(input.projectId ?? ''),
       policy: { replyMode: 'auto', maxSpeakers: 2 },
     }))
   }

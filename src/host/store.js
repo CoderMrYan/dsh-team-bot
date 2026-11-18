@@ -9,7 +9,7 @@
  */
 import { appendFile, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { routeMessage } from './routing.js'
 import { defaultMemory, mergeAtoms, normalizeMemory } from './memory.js'
 import { createAvatar } from './avatars.js'
@@ -20,6 +20,13 @@ const TASK_STATUSES = new Set(['queued', 'running', 'waiting', 'in_review', 'nee
 const REVIEW_STATUSES = new Set(['none', 'pending', 'changes_requested', 'approved', 'rejected'])
 const TASK_KINDS = new Set(['implementation', 'review', 'publish', 'merge', 'spend', 'external'])
 const HIGH_RISK_KINDS = new Set(['publish', 'merge', 'spend', 'external'])
+
+/** @returns {string} a stable, filesystem-safe key for one DSH workspace path. */
+export function projectKey(projectId) {
+  const value = String(projectId ?? '').trim()
+  if (value === '') return ''
+  return createHash('sha1').update(value).digest('hex').slice(0, 20)
+}
 const PRESENCE_STATUSES = new Set(['idle', 'thinking', 'tool', 'waiting', 'blocked', 'offline'])
 const APPROVAL_STATUSES = new Set(['pending', 'approved', 'rejected', 'executed'])
 
@@ -123,11 +130,14 @@ export class TeamStore {
       bot.isMain = bot.isMain === true
       bot.title = String(bot.title ?? '')
       bot.skills = Array.isArray(bot.skills) ? bot.skills.map(String) : []
+      bot.projectSessions = bot.projectSessions && typeof bot.projectSessions === 'object' ? bot.projectSessions : {}
+      bot.projectSessionOrder = Array.isArray(bot.projectSessionOrder) ? bot.projectSessionOrder.map(String) : []
       if (bot.avatar === undefined) bot.avatar = createAvatar(bot.name, 'bot')
     }
     for (const room of Object.values(this.state.rooms)) {
       room.teamId = String(room.teamId ?? '')
       room.teamName = String(room.teamName ?? '')
+      room.projectId = String(room.projectId ?? '')
       if (room.avatar === undefined) room.avatar = createAvatar(room.name, 'room')
     }
     for (const card of Object.values(this.state.teamCards)) {
@@ -251,6 +261,7 @@ export class TeamStore {
       artifacts: Array.isArray(task.artifacts) ? task.artifacts : [],
       id: String(task.id ?? ''),
       kind: TASK_KINDS.has(task.kind) ? task.kind : 'implementation',
+      projectId: String(task.projectId ?? ''),
       acceptanceCriteria: String(task.acceptanceCriteria ?? ''),
       reviewerBotId: String(task.reviewerBotId ?? ''),
       reviewStatus: REVIEW_STATUSES.has(task.reviewStatus) ? task.reviewStatus : 'none',
@@ -286,13 +297,11 @@ export class TeamStore {
     if (ownerBotId !== '') this.getBot(ownerBotId)
     const roomId = String(input.roomId ?? '')
     let teamId = String(input.teamId ?? '')
-    if (teamId === '' && roomId !== '') {
-      try {
-        teamId = this.getRoom(roomId).teamId
-      } catch {
-        teamId = ''
-      }
+    const room = roomId === '' ? undefined : this.getRoom(roomId)
+    if (teamId === '' && room !== undefined) {
+      teamId = room.teamId
     }
+    const projectId = String(input.projectId ?? room?.projectId ?? '')
     const card = teamId === '' ? undefined : this.getTeamCard(teamId)
     const cardReviewer = card?.reviewerBotId ?? ''
     let reviewerBotId = String(input.reviewerBotId ?? '')
@@ -317,6 +326,7 @@ export class TeamStore {
       needsApproval,
       approvalStage,
       approvalStatus: preApproval ? 'pending' : 'none',
+      projectId,
       roomId,
       teamId,
       parentId: String(input.parentId ?? ''),
@@ -337,6 +347,9 @@ export class TeamStore {
   /** @returns {object[]} tasks, newest update first. */
   listTasks(filter = {}) {
     let tasks = Object.values(this.state.tasks).map((task) => this.normalizeTask(task))
+    if (typeof filter.projectId === 'string' && filter.projectId !== '') {
+      tasks = tasks.filter((task) => task.projectId === filter.projectId)
+    }
     if (typeof filter.ownerBotId === 'string' && filter.ownerBotId !== '') {
       tasks = tasks.filter((task) => task.ownerBotId === filter.ownerBotId)
     }
@@ -940,8 +953,12 @@ export class TeamStore {
   }
 
   /** @returns {object[]} */
-  listRooms() {
-    return Object.values(this.state.rooms)
+  listRooms(filter = {}) {
+    const rooms = Object.values(this.state.rooms)
+    if (typeof filter.projectId === 'string' && filter.projectId !== '') {
+      return rooms.filter((room) => room.projectId === filter.projectId)
+    }
+    return rooms
   }
 
   /** Delete one bot profile. It must not be the Main Bot or a room member. */
@@ -991,6 +1008,7 @@ export class TeamStore {
       note: '',
       teamId: String(input.teamId ?? ''),
       teamName: String(input.teamName ?? ''),
+      projectId: String(input.projectId ?? ''),
       avatar: input.avatar ?? createAvatar(name, 'room'),
       createdAt: new Date().toISOString(),
     }
@@ -1244,6 +1262,7 @@ export class TeamStore {
       id: newId('dm'),
       kind: 'direct',
       botId: bot.id,
+      projectId: String(input.projectId ?? ''),
       seq: this.state.seq + 1,
       sender,
       text,
@@ -1259,7 +1278,7 @@ export class TeamStore {
   }
 
   /** Read the latest direct messages, oldest first. */
-  async directHistory(botId, limit = 50) {
+  async directHistory(botId, limit = 50, projectId = '') {
     await this.init()
     this.getBot(botId)
     const safeLimit = clampInt(limit, 1, 500, 50)
@@ -1269,11 +1288,12 @@ export class TeamStore {
     } catch (error) {
       if (error?.code !== 'ENOENT') throw error
     }
-    return raw
+    const messages = raw
       .split('\n')
       .filter((line) => line.trim() !== '')
-      .slice(-safeLimit)
       .map((line) => JSON.parse(line))
+      .filter((message) => projectId === '' || message.projectId === projectId)
+    return messages.slice(-safeLimit)
   }
 
   /** List direct conversations with their bot profile. */
@@ -1284,10 +1304,15 @@ export class TeamStore {
     }))
   }
 
-  /** Replace one bot's private summary. */
-  async setBotSummary(botId, summary) {
-    const memory = await this.botMemory(botId)
+  /** Replace one bot's private summary, optionally project-scoped. */
+  async setBotSummary(botId, summary, projectId = '') {
+    const memory = await this.botMemory(botId, projectId)
     memory.summary = String(summary ?? '').slice(0, 1200)
+    if (projectId !== '') {
+      memory.updatedAt = Date.now()
+      await this.writeJson(this.projectBotMemoryPath(botId, projectId), memory)
+      return normalizeMemory(memory)
+    }
     return await this.saveMemory('bot', botId, memory)
   }
 
@@ -1342,16 +1367,65 @@ export class TeamStore {
     return normalizeMemory(await this.readJson(this.memoryPath('room', roomId), defaultMemory()))
   }
 
-  /** Read one bot's private memory. */
-  async botMemory(botId) {
+  /** Read one bot's private memory, optionally scoped to a project. */
+  async botMemory(botId, projectId = '') {
     await this.init()
     this.getBot(botId)
+    if (projectId !== '') {
+      const project = normalizeMemory(await this.readJson(this.projectBotMemoryPath(botId, projectId), defaultMemory()))
+      const global = normalizeMemory(await this.readJson(this.memoryPath('bot', botId), defaultMemory()))
+      return { ...project, persona: global.persona }
+    }
     return normalizeMemory(await this.readJson(this.memoryPath('bot', botId), defaultMemory()))
+  }
+
+  /** @returns {string} project-scoped private Bot memory path. */
+  projectBotMemoryPath(botId, projectId) {
+    return path.join(this.root, 'memory', 'project-bot', projectKey(projectId), `${botId}.json`)
   }
 
   /** @returns {string} absolute memory document path. */
   memoryPath(scope, id) {
+    if (scope === 'project') {
+      return path.join(this.root, 'memory', 'project', `${projectKey(id)}.json`)
+    }
     return path.join(this.root, 'memory', scope, `${id}.json`)
+  }
+
+  /** Read project-scoped shared memory. */
+  async projectMemory(projectId) {
+    await this.init()
+    const id = String(projectId ?? '')
+    if (id === '') return defaultMemory()
+    return normalizeMemory(await this.readJson(this.memoryPath('project', id), defaultMemory()))
+  }
+
+  /** Add or supersede one project-scoped atom. */
+  async rememberProject(projectId, atom) {
+    const memory = await this.projectMemory(projectId)
+    const merged = mergeAtoms(memory.atoms, atom)
+    memory.atoms = merged.atoms
+    await this.saveMemory('project', projectId, memory)
+    return { memory, ...merged }
+  }
+
+  /** Remove one project-scoped atom. */
+  async forgetProject(projectId, atomId) {
+    const memory = await this.projectMemory(projectId)
+    memory.atoms = memory.atoms.filter((atom) => atom.id !== atomId)
+    return await this.saveMemory('project', projectId, memory)
+  }
+
+  /** Accept, reject or re-open one project-scoped atom. */
+  async reviewProject(projectId, atomId, review) {
+    return await this.reviewMemory('project', projectId, atomId, review)
+  }
+
+  /** Replace the project-scoped summary. */
+  async setProjectSummary(projectId, summary) {
+    const memory = await this.projectMemory(projectId)
+    memory.summary = String(summary ?? '').slice(0, 1200)
+    return await this.saveMemory('project', projectId, memory)
   }
 
   /** Persist one memory document. */
@@ -1370,11 +1444,16 @@ export class TeamStore {
     return { memory, ...merged }
   }
 
-  /** Add or supersede one private atom. */
-  async rememberBot(botId, atom) {
-    const memory = await this.botMemory(botId)
+  /** Add or supersede one private atom, optionally project-scoped. */
+  async rememberBot(botId, atom, projectId = '') {
+    const memory = await this.botMemory(botId, projectId)
     const merged = mergeAtoms(memory.atoms, atom)
     memory.atoms = merged.atoms
+    if (projectId !== '') {
+      memory.updatedAt = Date.now()
+      await this.writeJson(this.projectBotMemoryPath(botId, projectId), memory)
+      return { memory, ...merged }
+    }
     await this.saveMemory('bot', botId, memory)
     return { memory, ...merged }
   }
@@ -1387,9 +1466,14 @@ export class TeamStore {
   }
 
   /** Remove one private atom. */
-  async forgetBot(botId, atomId) {
-    const memory = await this.botMemory(botId)
+  async forgetBot(botId, atomId, projectId = '') {
+    const memory = await this.botMemory(botId, projectId)
     memory.atoms = memory.atoms.filter((atom) => atom.id !== atomId)
+    if (projectId !== '') {
+      memory.updatedAt = Date.now()
+      await this.writeJson(this.projectBotMemoryPath(botId, projectId), memory)
+      return memory
+    }
     return await this.saveMemory('bot', botId, memory)
   }
 
@@ -1399,7 +1483,16 @@ export class TeamStore {
   }
 
   /** Accept, reject or re-open one private atom. */
-  async reviewBot(botId, atomId, review) {
+  async reviewBot(botId, atomId, review, projectId = '') {
+    if (projectId !== '') {
+      const memory = await this.botMemory(botId, projectId)
+      const atom = memory.atoms.find((item) => item.id === atomId)
+      if (atom === undefined) throw new Error(`unknown memory atom: ${atomId}`)
+      atom.review = review
+      memory.updatedAt = Date.now()
+      await this.writeJson(this.projectBotMemoryPath(botId, projectId), memory)
+      return memory
+    }
     return await this.reviewMemory('bot', botId, atomId, review)
   }
 
@@ -1412,7 +1505,9 @@ export class TeamStore {
       ? await this.botMemory(id)
       : scope === 'team'
         ? await this.teamMemory(id)
-        : await this.roomMemory(id)
+        : scope === 'project'
+          ? await this.projectMemory(id)
+          : await this.roomMemory(id)
     const atom = memory.atoms.find((item) => item.id === atomId)
     if (atom === undefined) throw new Error(`unknown memory atom: ${atomId}`)
     atom.review = review

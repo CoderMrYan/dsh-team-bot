@@ -162,7 +162,7 @@ export function buildRoomPrompt(room, bot, messages, memory, task) {
     })
     .join('\n')
   const query = memory?.query ?? messages.at(-1)?.text ?? ''
-  const memoryBlock = memory === undefined ? '' : formatMemory(memory.roomMemory, memory.botMemory, query, memory.teamMemory)
+  const memoryBlock = memory === undefined ? '' : formatMemory(memory.roomMemory, memory.botMemory, query, memory.teamMemory, memory.projectMemory)
   const memorySection = memoryBlock === '' ? '' : `\n\n${memoryBlock}`
   const cardSection = teamCardSection(memory?.teamCard)
   return `You are "${bot.name}", ${bot.role}, in the DSH group room "${room.name}".${cardSection}
@@ -189,7 +189,7 @@ export function buildDirectPrompt(bot, messages, memory, note, task) {
     })
     .join('\n')
   const query = memory?.query ?? messages.at(-1)?.text ?? ''
-  const block = memory === undefined ? '' : formatMemory(undefined, memory.botMemory, query)
+  const block = memory === undefined ? '' : formatMemory(undefined, memory.botMemory, query, undefined, memory.projectMemory)
   const section = block === '' ? '' : `\n\n${block}`
   const cardSection = teamCardSection(memory?.teamCard)
   const noteBlock = typeof note === 'string' && note.trim() !== '' ? `\n\n${note.trim()}` : ''
@@ -210,7 +210,7 @@ Reply as ${bot.name}. Rules:
 /** @returns {string} the model-facing prompt for a delegated task. */
 export function buildTaskPrompt(bot, task, room, memory) {
   const query = task.brief || task.title
-  const memoryBlock = memory === undefined ? '' : formatMemory(memory.roomMemory, memory.botMemory, query, memory.teamMemory)
+  const memoryBlock = memory === undefined ? '' : formatMemory(memory.roomMemory, memory.botMemory, query, memory.teamMemory, memory.projectMemory)
   const memorySection = memoryBlock === '' ? '' : `\n\n${memoryBlock}`
   const cardSection = teamCardSection(memory?.teamCard)
   const roomLine = room === undefined ? '' : `\nShared room: "${room.name}" (${room.id}). Post a concise result there when useful.`
@@ -256,7 +256,8 @@ Review rules:
 }
 
 /** @returns {string} the model-facing prompt for the main orchestrator. */
-export function buildMainPrompt(mainBot, bots, rooms, tasks, presence, approvals = [], command = '') {
+export function buildMainPrompt(mainBot, bots, rooms, tasks, presence, approvals = [], command = '', projectId = '', projectMemory = undefined) {
+  const projectMemoryBlock = formatMemory(undefined, undefined, command, undefined, projectMemory)
   const botLines = bots.map((bot) => `- ${bot.id} ${bot.name} | ${bot.role} | ${bot.isMain ? 'MAIN' : 'sub-bot'}`).join('\n')
   const roomLines = rooms.map((room) => `- ${room.id} ${room.name} | members: ${room.members.join(', ')} | chief: ${room.chiefId || 'none'}`).join('\n')
   const taskLines = tasks.slice(0, 20).map((task) => `- ${task.id} [${task.status}] ${task.title} | owner: ${task.ownerBotId || 'unassigned'} | reviewer: ${task.reviewerBotId || 'none'} | review: ${task.reviewStatus} | ${task.currentStep || 'no step'}`).join('\n')
@@ -266,6 +267,8 @@ export function buildMainPrompt(mainBot, bots, rooms, tasks, presence, approvals
 
 You are a real agent with your own Session, not a settings page. Talk to the Lead naturally, decide what needs to happen, and use tools to make it happen. The Lead can ask you to create sub-bots, create groups, assign tasks, inspect progress, unblock work, or summarize the team.
 
+Current project (DSH workspace): ${projectId || '(no workspace on screen)'}
+${projectMemoryBlock === '' ? '' : `\n${projectMemoryBlock}\n`}
 Current team:
 ${botLines || '- no bots yet'}
 
@@ -285,6 +288,7 @@ The Lead's latest command (act on this now):
 ${command || '(none)'}
 
 Operating rules:
+- Keep project scope: create tasks/rooms for the Current project above; never mix another project's facts into this command.
 - For non-trivial work, create a task first (team_task_create), then create or choose a sub-bot and dispatch it with team_task_dispatch. Give the task acceptance criteria and, whenever possible, a reviewer that is not the owner. Use team_task_assign only for a deliberately short synchronous task.
 - Use team_card_get before assigning team work. If a team has no reviewer, rules or skills, set them with team_card_update; new tasks inherit the Team Card reviewer automatically.
 - Set task kind to publish/merge/spend/external for external side effects; the Team Card policy forces a human approval before completion. Do not treat a plan or a file as the external action itself.
@@ -316,6 +320,37 @@ export class BotRuntime {
     this.chains = new Map()
     this.active = new Map()
     this.modelApplied = new Map()
+    this.mainProject = ''
+  }
+
+  /** Set the current project while the Main Bot handles one command. */
+  setMainProject(projectId) {
+    this.mainProject = String(projectId ?? '')
+    return this.mainProject
+  }
+
+  /** Resolve the project scope behind one Agent Session, when known. */
+  projectForSession(sessionId) {
+    const id = String(sessionId ?? '')
+    if (id === '') return ''
+    const main = this.store.getMainBot()
+    if (main !== undefined) {
+      if (main.sessionId === id) return this.mainProject
+      for (const [projectId, session] of Object.entries(main.projectSessions ?? {})) {
+        if (session === id) return projectId
+      }
+    }
+    for (const bot of this.store.listBots({ includeHidden: true })) {
+      if (bot.sessionId === id) return ''
+      for (const [projectId, session] of Object.entries(bot.projectSessions ?? {})) {
+        if (session === id) return projectId
+      }
+      for (const [taskId, session] of Object.entries(bot.taskSessions ?? {})) {
+        if (session !== id) continue
+        try { return this.store.getTask(taskId).projectId } catch { return '' }
+      }
+    }
+    return ''
   }
 
   /** @returns {number} the wall-clock budget for one turn of this bot. */
@@ -329,8 +364,10 @@ export class BotRuntime {
   }
 
   /** Resolve and create the isolated workspace for one task. */
-  async ensureTaskWorkspace(taskId) {
-    const root = this.workspaceRoot !== '' ? this.workspaceRoot : path.join(this.store.root, 'workspace')
+  async ensureTaskWorkspace(taskId, projectId = '') {
+    const root = typeof projectId === 'string' && projectId !== ''
+      ? path.join(projectId, '.dsh-team')
+      : this.workspaceRoot !== '' ? this.workspaceRoot : path.join(this.store.root, 'workspace')
     const dir = path.join(root, 'tasks', String(taskId))
     await mkdir(dir, { recursive: true })
     return dir
@@ -341,7 +378,9 @@ export class BotRuntime {
    * @returns {Promise<{ absolute: string, relative: string }>}
    */
   async resolveTaskArtifact(taskId, artifactPath) {
-    const workspace = await this.ensureTaskWorkspace(taskId)
+    let projectId = ''
+    try { projectId = this.store.getTask(taskId).projectId } catch { projectId = '' }
+    const workspace = await this.ensureTaskWorkspace(taskId, projectId)
     const raw = String(artifactPath ?? '').trim()
     if (raw === '') throw new Error('artifact path is required')
     const absolute = path.isAbsolute(raw) ? path.resolve(raw) : path.resolve(workspace, raw)
@@ -393,10 +432,13 @@ export class BotRuntime {
     if (options.taskSession === true && typeof options.taskId === 'string' && options.taskId !== '') {
       return bot.taskSessions?.[options.taskId] ?? ''
     }
+    if (typeof options.projectId === 'string' && options.projectId !== '') {
+      return bot.projectSessions?.[options.projectId] ?? ''
+    }
     return typeof bot.sessionId === 'string' ? bot.sessionId : ''
   }
 
-  /** Remember one Session id for the profile, keyed by task when the turn belongs to one. */
+  /** Remember one Session id for the profile, keyed by task or project. */
   rememberSession(bot, sessionId, options = {}) {
     if (options.taskSession === true && typeof options.taskId === 'string' && options.taskId !== '') {
       const order = Array.isArray(bot.taskSessionOrder)
@@ -407,6 +449,17 @@ export class BotRuntime {
       while (order.length > 30) delete sessions[order.shift()]
       bot.taskSessions = sessions
       bot.taskSessionOrder = order
+      return
+    }
+    if (typeof options.projectId === 'string' && options.projectId !== '') {
+      const order = Array.isArray(bot.projectSessionOrder)
+        ? bot.projectSessionOrder.filter((id) => id !== options.projectId)
+        : []
+      order.push(options.projectId)
+      const sessions = { ...(bot.projectSessions ?? {}), [options.projectId]: sessionId }
+      while (order.length > 30) delete sessions[order.shift()]
+      bot.projectSessions = sessions
+      bot.projectSessionOrder = order
       return
     }
     bot.sessionId = sessionId
@@ -434,9 +487,11 @@ export class BotRuntime {
     }
     const cwd = typeof options.workspace === 'string' && options.workspace !== ''
       ? options.workspace
-      : typeof bot.workspace === 'string' && bot.workspace !== ''
-        ? bot.workspace
-        : this.workspaceRoot
+      : typeof options.projectId === 'string' && options.projectId !== ''
+        ? options.projectId
+        : typeof bot.workspace === 'string' && bot.workspace !== ''
+          ? bot.workspace
+          : this.workspaceRoot
     const created = await this.ctx.sessionController.create({
       ...(cwd === '' ? {} : { cwd }),
     })
@@ -452,7 +507,7 @@ export class BotRuntime {
    * @param {object} bot
    * @param {string} prompt
    * @param {AbortSignal} [signal]
-   * @param {{ taskId?: string, roomId?: string, autoStart?: boolean, workspace?: string, readOnly?: boolean }} [context]
+   * @param {{ taskId?: string, roomId?: string, autoStart?: boolean, workspace?: string, projectId?: string, readOnly?: boolean }} [context]
    */
   ask(bot, prompt, signal, context = {}) {
     const previous = this.chains.get(bot.id) ?? Promise.resolve()
@@ -607,9 +662,11 @@ export class BotRuntime {
     const controller = new AbortController()
     const fused = signal === undefined ? controller.signal : AbortSignal.any([signal, controller.signal])
     const taskId = String(context.taskId ?? '')
+    const projectId = String(context.projectId ?? '')
     const sessionId = await this.ensureSession(bot, fused, {
       taskSession: context.taskSession === true,
       taskId,
+      projectId,
     })
     let readOnlyDispose
     if (context.readOnly === true) {

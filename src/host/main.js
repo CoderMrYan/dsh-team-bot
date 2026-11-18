@@ -27,14 +27,15 @@ export async function ensureMain(store) {
 }
 
 /** Read the live command-center snapshot used by the prompt and the UI. */
-export async function commandState(store) {
+export async function commandState(store, projectId = '') {
   await store.init()
   const main = await ensureMain(store)
   return {
     main,
+    projectId: String(projectId ?? ''),
     bots: store.listBots(),
-    rooms: store.listRooms(),
-    tasks: store.listTasks(),
+    rooms: store.listRooms(projectId === '' ? {} : { projectId }),
+    tasks: store.listTasks(projectId === '' ? {} : { projectId }),
     presence: store.listPresence(),
     activity: store.listActivity({ limit: 80 }),
     approvals: store.listApprovals({ status: 'pending' }),
@@ -42,10 +43,11 @@ export async function commandState(store) {
 }
 
 /** Append one proactive Main Bot notification to the command-center chat. */
-export async function notifyMain(store, text) {
+export async function notifyMain(store, text, projectId = '') {
   const main = await ensureMain(store)
   return await store.postDirect({
     botId: main.id,
+    projectId: String(projectId ?? ''),
     sender: { type: 'bot', id: main.id, name: main.name },
     text: String(text ?? ''),
   })
@@ -59,22 +61,31 @@ export async function notifyMain(store, text) {
  * @param {AbortSignal} [signal]
  */
 export async function askMain(store, runtime, input, signal) {
-  const state = await commandState(store)
+  const projectId = String(input.projectId ?? '')
+  const state = await commandState(store, projectId)
   const main = state.main
   const posted = await store.postDirect({
     botId: main.id,
+    projectId,
     sender: { type: 'human', name: 'human' },
     text: input.text,
   })
-  const prompt = buildMainPrompt(main, state.bots, state.rooms, state.tasks, state.presence, state.approvals, input.text)
-  const text = (await runtime.ask(main, prompt, signal)).trim()
-  if (text === '' || text === '[PASS]') {
-    return { main, posted, reply: undefined }
+  const prompt = buildMainPrompt(main, state.bots, state.rooms, state.tasks, state.presence, state.approvals, input.text, projectId, projectId === '' ? undefined : await store.projectMemory(projectId))
+  const previousProject = runtime.mainProject
+  if (typeof runtime.setMainProject === 'function') runtime.setMainProject(projectId)
+  try {
+    const text = (await runtime.ask(main, prompt, signal, { projectId })).trim()
+    if (text === '' || text === '[PASS]') {
+      return { main, posted, reply: undefined }
+    }
+    const reply = await store.postDirect({
+      botId: main.id,
+      projectId,
+      sender: { type: 'bot', id: main.id, name: main.name },
+      text,
+    })
+    return { main, posted, reply }
+  } finally {
+    if (typeof runtime.setMainProject === 'function') runtime.setMainProject(previousProject)
   }
-  const reply = await store.postDirect({
-    botId: main.id,
-    sender: { type: 'bot', id: main.id, name: main.name },
-    text,
-  })
-  return { main, posted, reply }
 }

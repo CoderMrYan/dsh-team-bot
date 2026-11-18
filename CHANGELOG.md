@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.24.0 — 2026-11-18
+
+### Added
+
+- **Project scope (DSH workspace)**: tasks, rooms, artifacts, long-lived room/private Sessions and the Main Bot's project sessions are scoped by the workspace path shown in the client.
+- **Project memory and project-private Bot memory**: shared project facts/summaries and per-Bot project notes live under separate project-scoped files; retrieval injects only the current project plus global team rules/persona.
+- **Project-bound artifacts**: task workspaces move to `<workspace>/.dsh-team/tasks/<task-id>`; the client sends the current workspace with `/state`, `/main/ask`, room creation and DM requests.
+- **Project-filtered brief and task/room tools**: `team_brief`, `team_task_list`, `team_room_list`, direct history and task access only see the caller's project.
+
+### Changed
+
+- The Main Bot keeps its global role and Team Card, but uses one long-lived Session per project and filters its prompt/state to the current project.
+- Direct messages and notifications carry a project id, so the panel only shows the current project's Main Bot conversation.
+- Existing unscoped data keeps the legacy global behavior until it is rebound to a project.
+
 ## 0.23.1 — 2026-11-18
 
 ### Fixed

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.24.2 — 2026-11-18
+
+### Changed
+
+- Project rules are explicitly marked as taking precedence over global Team Card rules when they conflict.
+
 ## 0.24.1 — 2026-11-18
 
 ### Added

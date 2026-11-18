@@ -4,7 +4,7 @@ Native multi-agent group chat for [DeepSeek Harness](https://github.com/deepseek
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-> Status: **0.24.1** — project rules UI, DSH workspace project scoping, left-sidebar side-by-side entry, pre-execution human approval for high-risk tasks plus read-only reviewer sessions, Team Cards with layered role/team context, token/wake accounting and heartbeat briefs, task cancellation, background task dispatch with a scheduler and global concurrency cap, independent task review, per-task isolated workspaces with validated artifacts, reviewer identity checks, right-sidebar docking, separate Main-Bot/sub-bot turn budgets, per-bot model routing, per-task Sessions, persistent Main Bot command center, durable tasks/steps/artifacts, live activity/presence, asynchronous handoff, human approvals for destructive actions, tool-stall detection and stop/cancel, watchdog alerts, plus rooms, memory and mobile UI. Install from GitHub; npm publish is optional and not done.
+> Status: **0.24.2** �?project rules UI, DSH workspace project scoping, left-sidebar side-by-side entry, pre-execution human approval for high-risk tasks plus read-only reviewer sessions, Team Cards with layered role/team context, token/wake accounting and heartbeat briefs, task cancellation, background task dispatch with a scheduler and global concurrency cap, independent task review, per-task isolated workspaces with validated artifacts, reviewer identity checks, right-sidebar docking, separate Main-Bot/sub-bot turn budgets, per-bot model routing, per-task Sessions, persistent Main Bot command center, durable tasks/steps/artifacts, live activity/presence, asynchronous handoff, human approvals for destructive actions, tool-stall detection and stop/cancel, watchdog alerts, plus rooms, memory and mobile UI. Install from GitHub; npm publish is optional and not done.
 
 ## Local workspace and safety boundary
 
@@ -17,12 +17,12 @@ This version can use the DSH host machine as an execution node, but **not** as a
 - Tasks stop when the machine sleeps or DSH exits; this is not 24×7 cloud hosting.
 - Do not put SSH keys, tokens or customer data in the workspace. Prompt injection can still try to read or exfiltrate files.
 
-The watchdog detects “no progress” but never bypasses approvals to act on its own.
+The watchdog detects “no progress�?but never bypasses approvals to act on its own.
 
 ## Migrating from 0.12
 
 - `state.json` is upgraded on first load with `tasks / activities / presence / main`; existing bots, rooms, messages and memory are preserved.
-- A `主 Bot` is created on first panel load if absent. It is not automatically added to existing rooms.
+- A `�?Bot` is created on first panel load if absent. It is not automatically added to existing rooms.
 - Restart DSH or reload the plugin for Host changes, then hard-refresh the browser for the new panel.
 - The task workspace defaults to `$DSH_HOME/dsh-team-bot/workspace`; a bot's explicit `workspace` field wins.
 - Existing room chats remain available; the command center is the new default view.
@@ -35,27 +35,24 @@ DSH already has single agents, subagents, and an experimental Agent Teams runtim
 
 ## Product shape
 
-- **Shared room** — one timeline for the human and several bots; `@`, chief routing, or automatic routing.
-- **Chief desk + private chats** — the chief has its own session, can bring conclusions back to the room, and can hand work to members.
-- **Memory** — shared room memory (L0 raw → L1 facts → L2 summary → L3 persona) plus per-bot private memory.
-- **Real sessions** — each bot is backed by a real DSH session, so tools, approvals, streaming, search, and model selection are inherited rather than reimplemented.
-- **One-sentence teams** — describe the goal ("我要做一个短视频团队") and the plugin creates the roles, the main room, and sub-rooms with their own chiefs.
+- **Shared room** �?one timeline for the human and several bots; `@`, chief routing, or automatic routing.
+- **Chief desk + private chats** �?the chief has its own session, can bring conclusions back to the room, and can hand work to members.
+- **Memory** �?shared room memory (L0 raw �?L1 facts �?L2 summary �?L3 persona) plus per-bot private memory.
+- **Real sessions** �?each bot is backed by a real DSH session, so tools, approvals, streaming, search, and model selection are inherited rather than reimplemented.
+- **One-sentence teams** �?describe the goal ("我要做一个短视频团队") and the plugin creates the roles, the main room, and sub-rooms with their own chiefs.
 
 ### One-sentence teams
 
 `team_compose({ brief })` matches a built-in archetype and creates everything in one call:
 
 ```text
-短视频团队 → 总导演 / 制片 / 编剧 / 前期导演 / 后期导演 / 剪辑师 / 声音设计 / 视觉设计
-            主群 + 前期组（编剧、前期导演、制片，chief 前期导演）
-                 + 后期组（后期导演、剪辑师、声音设计、视觉设计，chief 后期导演）
-软件项目团队 → 项目经理 / 产品经理 / UI/UX 设计 / 前端 / 后端 / 测试
-            主群 + 产品组 / 开发组 / 测试组
-```
+短视频团�?�?总导�?/ 制片 / 编剧 / 前期导演 / 后期导演 / 剪辑�?/ 声音设计 / 视觉设计
+            主群 + 前期组（编剧、前期导演、制片，chief 前期导演�?                 + 后期组（后期导演、剪辑师、声音设计、视觉设计，chief 后期导演�?软件项目团队 �?项目经理 / 产品经理 / UI/UX 设计 / 前端 / 后端 / 测试
+            主群 + 产品�?/ 开发组 / 测试�?```
 
 `team_template_list` lists the archetypes; `team_room_update` changes members or grafts the same chief onto another room.
 
-When the brief does not match an archetype, a hidden **团队架构师** Session turns it into a validated JSON role plan; an invalid plan falls back to a generic three-role team, so composition never dead-ends.
+When the brief does not match an archetype, a hidden **团队架构�?* Session turns it into a validated JSON role plan; an invalid plan falls back to a generic three-role team, so composition never dead-ends.
 
 Every bot and room gets a deterministic `{hue, variant}` avatar; the panel draws it as an SVG gradient face. The panel's **AI 建队** button calls `POST /compose` with the same templates.
 
@@ -121,21 +118,21 @@ Tools:
 An owner can no longer mark its own task done:
 
 ```text
-queued → running → in_review → done
-                    ↘ changes (max 3) → blocked
-                    ↘ needs_approval → human approves → done
+queued �?running �?in_review �?done
+                    �?changes (max 3) �?blocked
+                    �?needs_approval �?human approves �?done
 ```
 
 - `team_task_create` accepts `acceptance_criteria`, `reviewer_bot_id`, and `needs_approval`;
 - the owner registers a real file with `team_task_artifact`, then calls `team_task_submit_review`;
 - the reviewer (never the owner) uses `team_task_review` with `approve / changes / reject`;
 - a changes verdict wakes the owner for rework; three failed rounds block the task;
-- `needs_approval` tasks wait for the panel's 「批准完成 / 拒绝返工」 action;
+- `needs_approval` tasks wait for the panel's 「批准完�?/ 拒绝返工�?action;
 - every task runs in `workspace/tasks/<task-id>/`, and its task Session cwd points there; artifacts must stay inside it and must exist.
 
 ### Per-bot models
 
-A profile's `model` is a `provider/model` route (for example `openai/gpt-6.1-sol`). After creating or resolving the bot's real Session, the runtime calls `sessionController.selectModel`, so room turns, private chats and workspace task Sessions all run on that route. Changing the profile re-applies on the next turn; clearing it returns the bot to the deployment default. Provider routes are configured in DSH **Settings → Models** (`llm-pi-ai` custom model APIs); an unconfigured route fails with `cannot use model` instead of silently falling back.
+A profile's `model` is a `provider/model` route (for example `openai/gpt-6.1-sol`). After creating or resolving the bot's real Session, the runtime calls `sessionController.selectModel`, so room turns, private chats and workspace task Sessions all run on that route. Changing the profile re-applies on the next turn; clearing it returns the bot to the deployment default. Provider routes are configured in DSH **Settings �?Models** (`llm-pi-ai` custom model APIs); an unconfigured route fails with `cannot use model` instead of silently falling back.
 
 ### Team Cards and layered context
 
@@ -155,7 +152,7 @@ A profile's `model` is a `provider/model` route (for example `openai/gpt-6.1-sol
 
 ### How to configure project rules
 
-Open a room in the current project → **Memory** → **Project memory** → fill 「项目规则」 and click 「保存项目规则」.
+Open a room in the current project �?**Memory** �?**Project memory** �?fill 「项目规则�?and click 「保存项目规则�?
 
 - the rule is stored as the project summary and **injected into every bot/Main Bot turn** for this workspace;
 - the input below records project facts, recalled only for this project;
@@ -166,7 +163,7 @@ Open a room in the current project → **Memory** → **Project memory** → fil
 
 The reviewer turn applies `tools.restrict` with a read-only tool set: read/search/task reads/brief/Team Card reads and `team_task_review` only; `write`, `edit`, `pwsh`, artifact registration and memory mutations are hidden. If the composition cannot apply the restriction, the reviewer turn fails closed.
 
-Tasks with kind `publish`, `merge`, `spend` or `external` enter `needs_approval` **before execution** under the Team Card policy (default human): the scheduler and synchronous assignment refuse to start them, the panel offers 「批准执行 / 拒绝执行」, and only then is the task re-queued for normal independent review. Models cannot bypass this with `updateTask`/`assignTask`.
+Tasks with kind `publish`, `merge`, `spend` or `external` enter `needs_approval` **before execution** under the Team Card policy (default human): the scheduler and synchronous assignment refuse to start them, the panel offers 「批准执�?/ 拒绝执行�? and only then is the task re-queued for normal independent review. Models cannot bypass this with `updateTask`/`assignTask`.
 
 ### Sessions and timeouts
 
@@ -200,16 +197,16 @@ Bot profiles persist their `sessionId`, so the next room message continues the s
 
 ### Memory (P3 MVP)
 
-- **L0** — the append-only room JSONL stays the source of truth.
-- **Team** — rooms with the same `teamId` share `memory/team/<teamId>.json`; team facts are injected before room facts, so 前期组 and 后期组 see the same team standard. The team summary is rebuilt from the latest messages across all team rooms after each ask.
-- **L1** — atoms `{key, text, importance, review}`. Same `key` supersedes, a near-duplicate (Jaccard ≥ 0.8) is skipped, and the list is capped at 40 by importance.
-- **L2** — an extractive summary over the last 8 messages, refreshed after every `ask`.
-- **L3** — per-bot standing preferences (`team_memory_persona`), capped at 12.
-- **Capture** — a human message containing 记住 / 以后 / 决定 / 规则是 / 不要 / 必须 / 约定 becomes an atom: 记住 is accepted, the rest stay pending for review.
-- **Recall** — CJK bigrams + ASCII words, token overlap plus an importance prior; top 4 shared and top 4 private atoms are injected into the bot prompt with the summary. Only **accepted** atoms are recalled.
-- **Review** — auto-captured atoms that are not an explicit 记住 stay `pending`; `team_memory_review` and the panel drawer accept, reject or re-open them. Rejected atoms stay in the document as tombstones but never enter a prompt.
-- **Write paths** — model tools (`team_memory_*`), the panel drawer, and `POST` / `DELETE /rooms/:id/memory` plus `POST /rooms/:id/memory/review`.
-- **Limit** — this is deterministic extraction, not an LLM summarizer; LLM extraction remains future work.
+- **L0** �?the append-only room JSONL stays the source of truth.
+- **Team** �?rooms with the same `teamId` share `memory/team/<teamId>.json`; team facts are injected before room facts, so 前期�?and 后期�?see the same team standard. The team summary is rebuilt from the latest messages across all team rooms after each ask.
+- **L1** �?atoms `{key, text, importance, review}`. Same `key` supersedes, a near-duplicate (Jaccard �?0.8) is skipped, and the list is capped at 40 by importance.
+- **L2** �?an extractive summary over the last 8 messages, refreshed after every `ask`.
+- **L3** �?per-bot standing preferences (`team_memory_persona`), capped at 12.
+- **Capture** �?a human message containing 记住 / 以后 / 决定 / 规则�?/ 不要 / 必须 / 约定 becomes an atom: 记住 is accepted, the rest stay pending for review.
+- **Recall** �?CJK bigrams + ASCII words, token overlap plus an importance prior; top 4 shared and top 4 private atoms are injected into the bot prompt with the summary. Only **accepted** atoms are recalled.
+- **Review** �?auto-captured atoms that are not an explicit 记住 stay `pending`; `team_memory_review` and the panel drawer accept, reject or re-open them. Rejected atoms stay in the document as tombstones but never enter a prompt.
+- **Write paths** �?model tools (`team_memory_*`), the panel drawer, and `POST` / `DELETE /rooms/:id/memory` plus `POST /rooms/:id/memory/review`.
+- **Limit** �?this is deterministic extraction, not an LLM summarizer; LLM extraction remains future work.
 
 ### Private chats and chief desk (P3.5)
 
@@ -220,7 +217,7 @@ Bot profiles persist their `sessionId`, so the next room message continues the s
 
 ### Web panel
 
-Click **团队群组** in the left sidebar: with an active Session it does not replace the conversation; it restores the conversation and opens the team console in the right sidebar. Without an active Session it falls back to the full console, because the right column has no Session surface. You can also open **Settings → 团队群组**. Rooms are grouped under their team and can be collapsed or filtered with the search box; the page shows member chips, the timeline with bot avatars, a composer (type `@` to pick a member), room creation with Bot search, and a memory drawer with room/team tabs. **管理** edits members and chief, renames the team, and can delete the room or the whole team (with confirmation).
+Click **团队群组** in the left sidebar: with an active Session it does not replace the conversation; it restores the conversation and opens the team console in the right sidebar. Without an active Session it falls back to the full console, because the right column has no Session surface. You can also open **Settings �?团队群组**. Rooms are grouped under their team and can be collapsed or filtered with the search box; the page shows member chips, the timeline with bot avatars, a composer (type `@` to pick a member), room creation with Bot search, and a memory drawer with room/team tabs. **管理** edits members and chief, renames the team, and can delete the room or the whole team (with confirmation).
 
 The **并排** button in the console header docks the console in the conversation's **right sidebar**, side by side with the chat (the column is resizable); the right sidebar's **+** guide also lists **团队群组**. The right column only exists while a Session is on screen, and the docked body uses the compact layout.
 
@@ -271,10 +268,10 @@ The directory can also be installed through the Plugins page (`plugin_manager in
 
 Verified packaging:
 
-- `npm install github:CoderMrYan/dsh-team-bot` → `added 1 package` (client, host, and locale files all present)
-- `npm pack` → 17 files, ~22 kB (LICENSE / README / CHANGELOG / client / host / locale)
-- `npm install <tarball>` → `added 1 package`
-- `npm publish --dry-run` → passes with public access (not published)
+- `npm install github:CoderMrYan/dsh-team-bot` �?`added 1 package` (client, host, and locale files all present)
+- `npm pack` �?17 files, ~22 kB (LICENSE / README / CHANGELOG / client / host / locale)
+- `npm install <tarball>` �?`added 1 package`
+- `npm publish --dry-run` �?passes with public access (not published)
 - Client bundle: registration smoke plus a React SSR render (title and empty state, ~1.5 kB HTML)
 
 ```yaml
@@ -311,9 +308,9 @@ The repo is a DSH bundle. Install the directory with `plugin_manager install_bun
 
 ## Design references
 
-- [dsh-bot](https://github.com/lisongjianustc/dsh-bot) — real-session bots, group relay, maxSpeakers, group note
-- [dsh-team-workbench](https://github.com/narkco-kang/dsh-team-workbench) — L0–L3 memory, department-as-one-agent, panel patterns
-- [dsh-superagent-prototype](https://github.com/deepseek-ai/dsh-superagent-prototype) — attention budget and authorization philosophy
+- [dsh-bot](https://github.com/lisongjianustc/dsh-bot) �?real-session bots, group relay, maxSpeakers, group note
+- [dsh-team-workbench](https://github.com/narkco-kang/dsh-team-workbench) �?L0–L3 memory, department-as-one-agent, panel patterns
+- [dsh-superagent-prototype](https://github.com/deepseek-ai/dsh-superagent-prototype) �?attention budget and authorization philosophy
 
 These are references for ideas; this repository does not copy their code.
 

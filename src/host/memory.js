@@ -156,6 +156,7 @@ export function formatMemory(roomMemory, botMemory, query, teamMemory, projectMe
   const parts = []
   if (typeof projectMemory?.summary === 'string' && projectMemory.summary.trim() !== '') {
     parts.push(`Current project summary:\n${projectMemory.summary.trim()}`)
+    parts.push('Current project rules take precedence over global Team Card rules when they conflict.')
   }
   const projectAtoms = recallAtoms(query, projectMemory?.atoms, 5)
   if (projectAtoms.length > 0) {

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.24.3 — 2026-11-18
+
+### Fixed
+
+- Restored the README files after a PowerShell encoding rewrite corrupted their non-ASCII text. No runtime behavior changed.
+
 ## 0.24.2 — 2026-11-18
 
 ### Changed

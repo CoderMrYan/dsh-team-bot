@@ -82,6 +82,30 @@ function summarizeArgs(raw) {
   }
 }
 
+/** Tools a reviewer may use while checking a deliverable. */
+const REVIEWER_READ_ONLY_TOOLS = new Set([
+  'read',
+  'glob',
+  'grep',
+  'web_search',
+  'web_fetch',
+  'team_task_get',
+  'team_task_list',
+  'team_task_review',
+  'team_brief',
+  'team_card_get',
+  'team_bot_list',
+  'team_room_list',
+  'team_room_history',
+  'team_dm_history',
+  'team_dm_list',
+])
+
+/** @returns {string[]} the read-only tools present in this deployment. */
+export function reviewerToolAllowlist(availableNames) {
+  return [...new Set(availableNames)].filter((name) => REVIEWER_READ_ONLY_TOOLS.has(name))
+}
+
 /** @returns {string} model-facing role skills, if any. */
 function botSkillSection(bot) {
   const skills = Array.isArray(bot?.skills) ? bot.skills.filter(Boolean) : []
@@ -113,6 +137,7 @@ function taskSection(task) {
 TASK CONTRACT
 - Task id: ${task.id}
 - Title: ${task.title}
+- Kind: ${task.kind || 'implementation'}${task.needsApproval ? ' · HUMAN APPROVAL REQUIRED before completion' : ''}
 - Brief: ${task.brief || '(none)'}
 - Acceptance criteria: ${task.acceptanceCriteria || '(not specified; infer concrete, checkable criteria)'}
 - Reviewer bot: ${task.reviewerBotId || '(not assigned yet)'}
@@ -262,6 +287,7 @@ ${command || '(none)'}
 Operating rules:
 - For non-trivial work, create a task first (team_task_create), then create or choose a sub-bot and dispatch it with team_task_dispatch. Give the task acceptance criteria and, whenever possible, a reviewer that is not the owner. Use team_task_assign only for a deliberately short synchronous task.
 - Use team_card_get before assigning team work. If a team has no reviewer, rules or skills, set them with team_card_update; new tasks inherit the Team Card reviewer automatically.
+- Set task kind to publish/merge/spend/external for external side effects; the Team Card policy forces a human approval before completion. Do not treat a plan or a file as the external action itself.
 - An owner cannot mark a task done. It must register an artifact and call team_task_submit_review; the reviewer calls team_task_review. Three failed review rounds block the task.
 - If the task belongs to a room, pass room_id when creating it; if it was created without one, bind it with team_task_update(room_id).
 - A sub-bot must report through team_task_report; when you need a status, call team_task_list or team_task_get.
@@ -426,7 +452,7 @@ export class BotRuntime {
    * @param {object} bot
    * @param {string} prompt
    * @param {AbortSignal} [signal]
-   * @param {{ taskId?: string, roomId?: string, autoStart?: boolean, workspace?: string }} [context]
+   * @param {{ taskId?: string, roomId?: string, autoStart?: boolean, workspace?: string, readOnly?: boolean }} [context]
    */
   ask(bot, prompt, signal, context = {}) {
     const previous = this.chains.get(bot.id) ?? Promise.resolve()
@@ -585,6 +611,18 @@ export class BotRuntime {
       taskSession: context.taskSession === true,
       taskId,
     })
+    let readOnlyDispose
+    if (context.readOnly === true) {
+      const resolved = await this.ctx.sessionController.resolveAgent(sessionId)
+      const agent = resolved?.agent
+      if (agent?.ctx?.tools?.restrict === undefined) {
+        throw new Error('read-only reviewer policy is unavailable in this DSH composition')
+      }
+      const names = this.ctx.tools?.schemas?.().map((schema) => schema.name) ?? []
+      const allow = reviewerToolAllowlist(names)
+      if (allow.length === 0) throw new Error('no read-only reviewer tools are available')
+      readOnlyDispose = agent.ctx.tools.restrict({ allow })
+    }
     this.active.set(bot.id, taskId)
     if (taskId !== '') {
       try {
@@ -695,6 +733,7 @@ export class BotRuntime {
       throw error
     } finally {
       pause()
+      try { readOnlyDispose?.() } catch { /* ignore */ }
       this.active.delete(bot.id)
       if (!ended) {
         await this.presence(bot, { status: 'blocked', action: '回合中断', taskId: '' })

@@ -18,6 +18,8 @@ const STATE_VERSION = 3
 const REPLY_MODES = new Set(['mention', 'admin', 'auto'])
 const TASK_STATUSES = new Set(['queued', 'running', 'waiting', 'in_review', 'needs_approval', 'blocked', 'done', 'failed', 'cancelled'])
 const REVIEW_STATUSES = new Set(['none', 'pending', 'changes_requested', 'approved', 'rejected'])
+const TASK_KINDS = new Set(['implementation', 'review', 'publish', 'merge', 'spend', 'external'])
+const HIGH_RISK_KINDS = new Set(['publish', 'merge', 'spend', 'external'])
 const PRESENCE_STATUSES = new Set(['idle', 'thinking', 'tool', 'waiting', 'blocked', 'offline'])
 const APPROVAL_STATUSES = new Set(['pending', 'approved', 'rejected', 'executed'])
 
@@ -247,6 +249,8 @@ export class TeamStore {
       progress: Number.isFinite(task.progress) ? Math.max(0, Math.min(100, task.progress)) : 0,
       steps: Array.isArray(task.steps) ? task.steps : [],
       artifacts: Array.isArray(task.artifacts) ? task.artifacts : [],
+      id: String(task.id ?? ''),
+      kind: TASK_KINDS.has(task.kind) ? task.kind : 'implementation',
       acceptanceCriteria: String(task.acceptanceCriteria ?? ''),
       reviewerBotId: String(task.reviewerBotId ?? ''),
       reviewStatus: REVIEW_STATUSES.has(task.reviewStatus) ? task.reviewStatus : 'none',
@@ -288,21 +292,27 @@ export class TeamStore {
         teamId = ''
       }
     }
-    const cardReviewer = teamId === '' ? '' : this.getTeamCard(teamId).reviewerBotId
+    const card = teamId === '' ? undefined : this.getTeamCard(teamId)
+    const cardReviewer = card?.reviewerBotId ?? ''
     let reviewerBotId = String(input.reviewerBotId ?? '')
     if (reviewerBotId === '' && cardReviewer !== '' && cardReviewer !== ownerBotId) reviewerBotId = cardReviewer
     if (reviewerBotId !== '') {
       this.getBot(reviewerBotId)
       if (reviewerBotId === ownerBotId) throw new Error('reviewer must be a different bot than the owner')
     }
+    const kind = TASK_KINDS.has(input.kind) ? input.kind : 'implementation'
+    const approvalPolicy = card?.approvalPolicy?.[kind] ?? 'human'
+    const needsApproval = input.needsApproval === true
+      || (HIGH_RISK_KINDS.has(kind) && approvalPolicy === 'human')
     const task = this.normalizeTask({
       id: newId('task'),
+      kind,
       title,
       brief: String(input.brief ?? '').trim(),
       acceptanceCriteria: String(input.acceptanceCriteria ?? '').trim(),
       ownerBotId,
       reviewerBotId,
-      needsApproval: input.needsApproval === true,
+      needsApproval,
       roomId,
       teamId,
       parentId: String(input.parentId ?? ''),
@@ -381,7 +391,14 @@ export class TeamStore {
       task.reviewerBotId = reviewer
     }
     if (patch.acceptanceCriteria !== undefined) task.acceptanceCriteria = String(patch.acceptanceCriteria)
-    if (patch.needsApproval !== undefined) task.needsApproval = patch.needsApproval === true
+    if (patch.needsApproval !== undefined) {
+      if (patch.needsApproval === false && HIGH_RISK_KINDS.has(task.kind)) {
+        const card = task.teamId === '' ? undefined : this.getTeamCard(task.teamId)
+        const policy = card?.approvalPolicy?.[task.kind] ?? 'human'
+        if (policy === 'human') throw new Error('human approval is required for this task kind')
+      }
+      task.needsApproval = patch.needsApproval === true
+    }
     if (patch.reviewStatus !== undefined) {
       if (!REVIEW_STATUSES.has(patch.reviewStatus)) throw new Error(`invalid review status: ${patch.reviewStatus}`)
       task.reviewStatus = patch.reviewStatus

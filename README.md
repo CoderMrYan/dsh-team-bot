@@ -4,7 +4,7 @@ Native multi-agent group chat for [DeepSeek Harness](https://github.com/deepseek
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-> Status: **0.20.0** — Team Cards with layered role/team context, token/wake accounting and heartbeat briefs, task cancellation, background task dispatch with a scheduler and global concurrency cap, independent task review with a reviewer distinct from the owner, per-task isolated workspaces with validated artifacts, reviewer identity checks, right-sidebar docking, separate Main-Bot/sub-bot turn budgets, per-bot model routing, per-task Sessions, persistent Main Bot command center, durable tasks/steps/artifacts, live activity/presence, asynchronous handoff, human approvals for destructive actions, tool-stall detection and stop/cancel, watchdog alerts, plus rooms, memory and mobile UI. Install from GitHub; npm publish is optional and not done.
+> Status: **0.21.0** — read-only reviewer sessions and forced high-risk approval, Team Cards with layered role/team context, token/wake accounting and heartbeat briefs, task cancellation, background task dispatch with a scheduler and global concurrency cap, independent task review, per-task isolated workspaces with validated artifacts, reviewer identity checks, right-sidebar docking, separate Main-Bot/sub-bot turn budgets, per-bot model routing, per-task Sessions, persistent Main Bot command center, durable tasks/steps/artifacts, live activity/presence, asynchronous handoff, human approvals for destructive actions, tool-stall detection and stop/cancel, watchdog alerts, plus rooms, memory and mobile UI. Install from GitHub; npm publish is optional and not done.
 
 ## Local workspace and safety boundary
 
@@ -145,6 +145,10 @@ A profile's `model` is a `provider/model` route (for example `openai/gpt-6.1-sol
 - **Project context**: Team Card rules can hold style guides, forbidden changes and known pitfalls.
 
 `team_compose` creates a Team Card and recognises review/test roles as the reviewer. New tasks automatically use the card reviewer when none is passed. `team_brief` / `GET /brief` reports task states, attention items, stale running tasks, token usage and wake counts. The heartbeat only writes activity/notifications and never calls a model. Each task drawer shows tokens and wakes; `team_task_cancel` cancels queued or running work.
+
+The reviewer turn applies `tools.restrict` with a read-only tool set: read/search/task reads/brief/Team Card reads and `team_task_review` only; `write`, `edit`, `pwsh`, artifact registration and memory mutations are hidden. If the composition cannot apply the restriction, the reviewer turn fails closed.
+
+Tasks with kind `publish`, `merge`, `spend` or `external` force `needs_approval` under the Team Card policy (default human); the model cannot clear it, and `done` requires both review and human approval.
 
 ### Sessions and timeouts
 

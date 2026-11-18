@@ -148,6 +148,7 @@ export function createTools(store, runtime, scheduler) {
       parameters: {
         title: { type: 'string', required: true, description: 'Short task title.' },
         brief: { type: 'string', description: 'Detailed brief and output location.' },
+        kind: { type: 'string', enum: ['implementation', 'review', 'publish', 'merge', 'spend', 'external'], description: 'Task risk kind. publish/merge/spend/external force human approval when the Team Card policy says human.' },
         acceptance_criteria: { type: 'string', description: 'Verifiable acceptance criteria the reviewer checks.' },
         owner_bot_id: { type: 'string', description: 'Optional bot id; empty means unassigned.' },
         reviewer_bot_id: { type: 'string', description: 'Independent reviewer bot id; must differ from the owner.' },
@@ -161,6 +162,7 @@ export function createTools(store, runtime, scheduler) {
         return await store.createTask({
           title: args.title,
           brief: args.brief,
+          kind: args.kind,
           acceptanceCriteria: args.acceptance_criteria,
           ownerBotId: args.owner_bot_id,
           reviewerBotId: args.reviewer_bot_id,
@@ -363,6 +365,7 @@ export function createTools(store, runtime, scheduler) {
             taskId: reviewed.id,
             taskSession: true,
             workspace: reviewed.workspace,
+            readOnly: true,
           }).catch(async (error) => {
             await store.recordActivity({
               botId: reviewer.id,

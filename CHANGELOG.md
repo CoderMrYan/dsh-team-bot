@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.21.0 — 2026-11-18
+
+### Added
+
+- **Read-only reviewer sessions**: when a task is submitted, the reviewer's task Session gets `tools.restrict({ allow })` for the duration of that turn. Only read/glob/grep/web search/fetch, task reads, brief, Team Card reads and `team_task_review` remain; `write`, `edit`, `pwsh`, artifact registration and memory mutations are hidden. The restriction is fail-closed when the DSH composition cannot apply it.
+- **Forced high-risk approval**: task kinds `publish`, `merge`, `spend` and `external` now force `needs_approval` when the Team Card policy says `human` (default). The model cannot clear that flag, and `done` still requires both review approval and human approval.
+- `team_task_create` accepts `kind`; task prompts and the panel show the risk kind and approval state.
+
 ## 0.20.0 — 2026-11-18
 
 ### Added

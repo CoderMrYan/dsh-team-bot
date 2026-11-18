@@ -4,7 +4,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { TeamStore } from '../src/host/store.js'
-import { BotRuntime } from '../src/host/runtime.js'
+import { BotRuntime, reviewerToolAllowlist } from '../src/host/runtime.js'
 import { assignTask } from '../src/host/actions.js'
 
 async function fresh() {
@@ -178,6 +178,16 @@ test('assistant usage is accumulated on the task', async () => {
   } finally {
     await rm(dir, { recursive: true, force: true })
   }
+})
+
+test('reviewer allowlist keeps read and review tools, removes writers', () => {
+  const names = ['read', 'glob', 'grep', 'web_search', 'web_fetch', 'write', 'edit', 'pwsh', 'team_task_get', 'team_task_review', 'team_task_artifact', 'team_memory_remember', 'team_task_cancel']
+  const allow = reviewerToolAllowlist(names)
+  assert.deepEqual(allow, ['read', 'glob', 'grep', 'web_search', 'web_fetch', 'team_task_get', 'team_task_review'])
+  assert.equal(allow.includes('write'), false)
+  assert.equal(allow.includes('edit'), false)
+  assert.equal(allow.includes('pwsh'), false)
+  assert.equal(allow.includes('team_task_artifact'), false)
 })
 
 test('artifact paths cannot escape the task workspace', async () => {

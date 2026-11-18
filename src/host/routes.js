@@ -225,6 +225,7 @@ export function registerRoutes(ctx, store, runtime, approvalBridge, scheduler) {
           sendJson(res, 200, await store.createTask({
             title: body.title,
             brief: body.brief,
+            kind: body.kind,
             acceptanceCriteria: body.acceptance_criteria,
             ownerBotId: body.owner_bot_id,
             reviewerBotId: body.reviewer_bot_id,

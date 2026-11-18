@@ -36,6 +36,39 @@ test('brief summarizes task states, attention and usage', async () => {
   }
 })
 
+test('high-risk task kinds force approval under a human policy', async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'dsh-team-approval-kind-'))
+  const store = new TeamStore(dir)
+  try {
+    await store.init()
+    const lead = await store.createBot({ name: 'lead', role: 'lead' })
+    const reviewer = await store.createBot({ name: 'reviewer', role: 'review' })
+    await store.createRoom({
+      name: 'team room',
+      members: [lead.id, reviewer.id],
+      chiefId: lead.id,
+      teamId: 'team-risk',
+      teamName: 'Risk Team',
+    })
+    await store.upsertTeamCard('team-risk', {
+      name: 'Risk Team',
+      leadBotId: lead.id,
+      reviewerBotId: reviewer.id,
+      approvalPolicy: { publish: 'human', merge: 'human', spend: 'human', external: 'human' },
+    })
+    const publish = await store.createTask({ title: 'publish video', kind: 'publish', teamId: 'team-risk', ownerBotId: lead.id })
+    assert.equal(publish.needsApproval, true)
+    assert.equal(publish.kind, 'publish')
+    const implementation = await store.createTask({ title: 'write script', kind: 'implementation', teamId: 'team-risk', ownerBotId: lead.id })
+    assert.equal(implementation.needsApproval, false)
+    await store.upsertTeamCard('team-risk', { approvalPolicy: { publish: 'auto' } })
+    const autoPublish = await store.createTask({ title: 'auto publish', kind: 'publish', teamId: 'team-risk', ownerBotId: lead.id })
+    assert.equal(autoPublish.needsApproval, false)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
 test('team card stores lead, reviewer, rules and approval policy', async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), 'dsh-team-card-'))
   const store = new TeamStore(dir)

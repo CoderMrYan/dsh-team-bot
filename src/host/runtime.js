@@ -399,7 +399,7 @@ export class BotRuntime {
    * @param {object} bot
    * @param {string} prompt
    * @param {AbortSignal} [signal]
-   * @param {{ taskId?: string, roomId?: string, autoStart?: boolean }} [context]
+   * @param {{ taskId?: string, roomId?: string, autoStart?: boolean, workspace?: string }} [context]
    */
   ask(bot, prompt, signal, context = {}) {
     const previous = this.chains.get(bot.id) ?? Promise.resolve()

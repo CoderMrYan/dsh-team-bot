@@ -4,7 +4,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-> 状态：**0.18.0** — 独立任务验收（reviewer 不能是 owner）、验收/返工/人工批准状态、每任务独立工作目录与 artifact 校验、右侧栏停靠（聊天与控制台并排）、主/子 Bot 分开的回合预算与委派暂停、每个 Bot 独立模型路由（provider/model）、每个任务独立 Session、`team_bot_reset`、常驻主 Bot 指挥台、可追踪任务/步骤/产物、每个 Bot 的工具级实时活动与在线状态、Bot 间异步交接、破坏性操作人工审批、工具卡住检测与停止回合、共享本机 workspace、看门狗告警，以及原有的房间/记忆/手机 UI。从 GitHub 安装；npm 发布是可选项，暂未发布。
+> 状态：**0.18.1** — 独立任务验收（reviewer 不能是 owner）、验收/返工/人工批准状态、每任务独立工作目录与 artifact 校验、reviewer 身份校验、右侧栏停靠（聊天与控制台并排）、主/子 Bot 分开的回合预算与委派暂停、每个 Bot 独立模型路由（provider/model）、每个任务独立 Session、`team_bot_reset`、常驻主 Bot 指挥台、可追踪任务/步骤/产物、每个 Bot 的工具级实时活动与在线状态、Bot 间异步交接、破坏性操作人工审批、工具卡住检测与停止回合、共享本机 workspace、看门狗告警，以及原有的房间/记忆/手机 UI。从 GitHub 安装；npm 发布是可选项，暂未发布。
 
 ## 本机 workspace 与安全边界
 

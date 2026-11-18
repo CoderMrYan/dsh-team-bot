@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.18.1 — 2026-11-18
+
+### Fixed
+
+- Tool calls now verify the calling DSH Session against `bot_id` / `reviewer_bot_id`, so a bot cannot submit or approve a task under another bot's identity.
+- The tool-approval bridge recognizes per-task Session ids in `bot.taskSessions`, not only the legacy single task Session field.
+
 ## 0.18.0 — 2026-11-18
 
 ### Added

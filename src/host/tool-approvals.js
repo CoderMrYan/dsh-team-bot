@@ -12,9 +12,11 @@ import { notifyMain } from './main.js'
 /** @returns {object|undefined} the bot profile owning a Session id. */
 function botForSession(store, sessionId) {
   if (typeof sessionId !== 'string' || sessionId === '') return undefined
-  return store.listBots({ includeHidden: true }).find(
-    (bot) => String(bot.sessionId) === String(sessionId) || String(bot.taskSessionId) === String(sessionId),
-  )
+  return store.listBots({ includeHidden: true }).find((bot) => {
+    if (String(bot.sessionId) === String(sessionId)) return true
+    if (String(bot.taskSessionId) === String(sessionId)) return true
+    return Object.values(bot.taskSessions ?? {}).some((id) => String(id) === String(sessionId))
+  })
 }
 
 /**

@@ -4,7 +4,7 @@ Native multi-agent group chat for [DeepSeek Harness](https://github.com/deepseek
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-> Status: **0.18.0** — independent task review with a reviewer distinct from the owner, review/rework/approval states, per-task isolated workspaces with validated artifacts, right-sidebar docking (chat and console side by side), separate Main-Bot/sub-bot turn budgets with delegation pause, per-bot model routing (`provider/model`), per-task Sessions, `team_bot_reset`, persistent Main Bot command center, durable tasks/steps/artifacts, live per-bot tool activity and presence, asynchronous bot-to-bot handoff, human approvals for destructive actions, tool-stall detection and stop/cancel, shared local workspace, watchdog alerts, plus the existing rooms, memory and mobile UI. Install from GitHub; npm publish is optional and not done.
+> Status: **0.18.1** — independent task review with a reviewer distinct from the owner, review/rework/approval states, per-task isolated workspaces with validated artifacts, reviewer identity checks, right-sidebar docking (chat and console side by side), separate Main-Bot/sub-bot turn budgets with delegation pause, per-bot model routing (`provider/model`), per-task Sessions, `team_bot_reset`, persistent Main Bot command center, durable tasks/steps/artifacts, live per-bot tool activity and presence, asynchronous bot-to-bot handoff, human approvals for destructive actions, tool-stall detection and stop/cancel, shared local workspace, watchdog alerts, plus the existing rooms, memory and mobile UI. Install from GitHub; npm publish is optional and not done.
 
 ## Local workspace and safety boundary
 

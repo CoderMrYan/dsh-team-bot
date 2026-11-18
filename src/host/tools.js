@@ -17,6 +17,25 @@ import { listTemplates } from './templates.js'
 const ANY_OBJECT = { type: 'object', additionalProperties: true }
 
 /** @returns {object} a tool output that renders the canonical value as compact JSON. */
+/** Resolve the team bot behind the calling DSH Session, for identity checks. */
+function callerBot(store, exec) {
+  const sessionId = exec?.agent?.id === undefined ? '' : String(exec.agent.id)
+  if (sessionId === '') return undefined
+  return store.listBots({ includeHidden: true }).find((bot) => {
+    if (String(bot.sessionId) === sessionId || String(bot.taskSessionId) === sessionId) return true
+    return Object.values(bot.taskSessions ?? {}).some((id) => String(id) === sessionId)
+  })
+}
+
+/** Throw when a tool argument claims to be a different bot than the caller. */
+function assertCaller(store, exec, botId) {
+  const caller = callerBot(store, exec)
+  if (caller === undefined) return
+  if (caller.id !== botId && caller.isMain !== true) {
+    throw new Error('bot_id must identify the calling bot')
+  }
+}
+
 function jsonOutput(schema = ANY_OBJECT) {
   return {
     schema,
@@ -173,7 +192,8 @@ export function createTools(store, runtime) {
         progress: { type: 'integer', description: '0-100; optional.' },
       },
       output: jsonOutput(),
-      async execute(args) {
+      async execute(args, exec) {
+        assertCaller(store, exec, args.bot_id)
         const progress = args.status === 'done' ? 100 : args.progress
         await store.updateTask(args.task_id, {
           status: args.status,
@@ -210,7 +230,8 @@ export function createTools(store, runtime) {
         artifact_paths: { type: 'array', items: { type: 'string' }, description: 'Optional deliverable paths to register before submitting.' },
       },
       output: jsonOutput(),
-      async execute(args) {
+      async execute(args, exec) {
+        assertCaller(store, exec, args.bot_id)
         const task = store.getTask(args.task_id)
         for (const artifactPath of args.artifact_paths ?? []) {
           const resolved = await runtime.resolveTaskArtifact(task.id, artifactPath)
@@ -277,7 +298,8 @@ export function createTools(store, runtime) {
         notes: { type: 'string', description: 'Concrete findings and required changes.' },
       },
       output: jsonOutput(),
-      async execute(args) {
+      async execute(args, exec) {
+        assertCaller(store, exec, args.reviewer_bot_id)
         const reviewed = await store.reviewTask(args.task_id, {
           reviewerBotId: args.reviewer_bot_id,
           verdict: args.verdict,

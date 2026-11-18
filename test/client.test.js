@@ -35,10 +35,11 @@ test('client bundle registers sidebar, main, and settings entries', () => {
   })
   assert.equal(row.id, 'dsh-team-bot')
   const module = row.factory(require)
-  assert.equal(module.inject.length, 3)
+  assert.equal(module.inject.length, 4)
   assert.equal(module.inject[0], 'slots')
   assert.equal(module.inject[1], 'sidebarRightTabs')
   assert.equal(module.inject[2], 'sidebarRight')
+  assert.equal(module.inject[3], 'layout')
   const registered = []
   const ctx = {
     effect: (fn) => {

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.23.0 — 2026-11-18
+
+### Fixed
+
+- **Opening 团队群组 from the left sidebar no longer replaces the conversation.** The left entry now mounts a launcher: when a Session is on screen and the right column is available, it restores the `conversation` main panel first and then opens the team tab in the right sidebar, so chat and team console stay side by side.
+- Without an active Session the launcher falls back to the full console, because the right column has no Session surface to dock into.
+- The right-sidebar guide entry and the console 「并排」 button remain available.
+
 ## 0.22.0 — 2026-11-18
 
 ### Changed

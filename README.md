@@ -4,7 +4,7 @@ Native multi-agent group chat for [DeepSeek Harness](https://github.com/deepseek
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-> Status: **0.22.0** — pre-execution human approval for high-risk tasks plus read-only reviewer sessions, Team Cards with layered role/team context, token/wake accounting and heartbeat briefs, task cancellation, background task dispatch with a scheduler and global concurrency cap, independent task review, per-task isolated workspaces with validated artifacts, reviewer identity checks, right-sidebar docking, separate Main-Bot/sub-bot turn budgets, per-bot model routing, per-task Sessions, persistent Main Bot command center, durable tasks/steps/artifacts, live activity/presence, asynchronous handoff, human approvals for destructive actions, tool-stall detection and stop/cancel, watchdog alerts, plus rooms, memory and mobile UI. Install from GitHub; npm publish is optional and not done.
+> Status: **0.23.0** — left-sidebar entry opens the team console side by side with the conversation, pre-execution human approval for high-risk tasks plus read-only reviewer sessions, Team Cards with layered role/team context, token/wake accounting and heartbeat briefs, task cancellation, background task dispatch with a scheduler and global concurrency cap, independent task review, per-task isolated workspaces with validated artifacts, reviewer identity checks, right-sidebar docking, separate Main-Bot/sub-bot turn budgets, per-bot model routing, per-task Sessions, persistent Main Bot command center, durable tasks/steps/artifacts, live activity/presence, asynchronous handoff, human approvals for destructive actions, tool-stall detection and stop/cancel, watchdog alerts, plus rooms, memory and mobile UI. Install from GitHub; npm publish is optional and not done.
 
 ## Local workspace and safety boundary
 
@@ -202,7 +202,7 @@ Bot profiles persist their `sessionId`, so the next room message continues the s
 
 ### Web panel
 
-Click **团队群组** in the left sidebar, or open **Settings → 团队群组**. Rooms are grouped under their team and can be collapsed or filtered with the search box; the page shows member chips, the timeline with bot avatars, a composer (type `@` to pick a member), room creation with Bot search, and a memory drawer with room/team tabs. **管理** edits members and chief, renames the team, and can delete the room or the whole team (with confirmation).
+Click **团队群组** in the left sidebar: with an active Session it does not replace the conversation; it restores the conversation and opens the team console in the right sidebar. Without an active Session it falls back to the full console, because the right column has no Session surface. You can also open **Settings → 团队群组**. Rooms are grouped under their team and can be collapsed or filtered with the search box; the page shows member chips, the timeline with bot avatars, a composer (type `@` to pick a member), room creation with Bot search, and a memory drawer with room/team tabs. **管理** edits members and chief, renames the team, and can delete the room or the whole team (with confirmation).
 
 The **并排** button in the console header docks the console in the conversation's **right sidebar**, side by side with the chat (the column is resizable); the right sidebar's **+** guide also lists **团队群组**. The right column only exists while a Session is on screen, and the docked body uses the compact layout.
 

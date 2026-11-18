@@ -4,7 +4,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-> 状态：**0.21.0** — reviewer 只读工具限制与高风险强制人工审批、Team Card 分层角色/团队上下文、token/唤醒统计与心跳简报、任务取消、后台任务调度与全局并发上限、独立任务验收、每任务独立工作目录与 artifact 校验、reviewer 身份校验、右侧栏停靠、主/子 Bot 分开的回合预算、每个 Bot 独立模型路由、每个任务独立 Session、常驻主 Bot 指挥台、可追踪任务/步骤/产物、实时活动/在线状态、Bot 间异步交接、破坏性操作人工审批、工具卡住检测与停止回合、看门狗，以及房间/记忆/手机 UI。从 GitHub 安装；npm 发布是可选项，暂未发布。
+> 状态：**0.22.0** — 高风险任务执行前强制人工审批 + reviewer 只读工具限制、Team Card 分层角色/团队上下文、token/唤醒统计与心跳简报、任务取消、后台任务调度与全局并发上限、独立任务验收、每任务独立工作目录与 artifact 校验、reviewer 身份校验、右侧栏停靠、主/子 Bot 分开的回合预算、每个 Bot 独立模型路由、每个任务独立 Session、常驻主 Bot 指挥台、可追踪任务/步骤/产物、实时活动/在线状态、Bot 间异步交接、破坏性操作人工审批、工具卡住检测与停止回合、看门狗，以及房间/记忆/手机 UI。从 GitHub 安装；npm 发布是可选项，暂未发布。
 
 ## 本机 workspace 与安全边界
 
@@ -150,7 +150,7 @@ Bot 画像的 `model` 是 `provider/model`（例如 `openai/gpt-6.1-sol`、`qwen
 
 Reviewer 自动验收时会应用 `tools.restrict` 只读工具集：只能读文件/搜索/读取任务和调用 `team_task_review`，不能 `write`、`edit`、`pwsh`、登记 artifact 或改记忆；如果当前 DSH composition 不支持限制，reviewer 直接失败而不是放行。
 
-任务 `kind` 为 `publish` / `merge` / `spend` / `external` 时，默认按 Team Card 的审批策略强制 `needs_approval`；模型不能清除该标记，只有验收通过且人工批准后才能 done。
+任务 `kind` 为 `publish` / `merge` / `spend` / `external` 时，默认按 Team Card 的审批策略在**执行前**进入 `needs_approval`：调度器和同步派发都拒绝启动，面板提供「批准执行 / 拒绝执行」；批准后才重新排队，之后仍要独立验收。模型不能通过 updateTask/assignTask 绕过这个 gate。
 
 ### 会话与超时
 

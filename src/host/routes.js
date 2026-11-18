@@ -311,12 +311,23 @@ export function registerRoutes(ctx, store, runtime, approvalBridge, scheduler) {
         if (parts[0] === 'tasks' && parts[1] !== undefined && parts[2] === 'approve' && req.method === 'POST') {
           const body = await readJson(req)
           const task = await store.approveTask(parts[1], { actor: body.actor ?? 'human', notes: body.notes })
-          if (task.ownerBotId !== '') await store.setPresence(task.ownerBotId, { status: 'idle', taskId: '', action: '任务完成' }).catch(() => undefined)
+          if (task.status === 'queued' && task.ownerBotId !== '') {
+            const approved = scheduler !== undefined
+              ? scheduler.schedule(task.id, task.ownerBotId, '人工批准执行')
+              : assignTask(store, runtime, {
+                  taskId: task.id,
+                  botId: task.ownerBotId,
+                  instruction: '人工批准执行',
+                })
+            void approved.catch(() => undefined)
+          } else if (task.ownerBotId !== '') {
+            await store.setPresence(task.ownerBotId, { status: 'idle', taskId: '', action: '任务完成' }).catch(() => undefined)
+          }
           await store.recordActivity({
             botId: task.ownerBotId,
             taskId: task.id,
             kind: 'approval',
-            label: '人工批准任务完成',
+            label: task.status === 'done' ? '人工批准任务完成' : '人工批准执行',
             detail: body.notes ?? '',
             status: 'done',
           })

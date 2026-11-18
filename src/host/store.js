@@ -260,6 +260,7 @@ export class TeamStore {
       submittedAt: String(task.submittedAt ?? ''),
       reviewedAt: String(task.reviewedAt ?? ''),
       needsApproval: task.needsApproval === true,
+      approvalStage: ['none', 'pre', 'post'].includes(task.approvalStage) ? task.approvalStage : 'none',
       approvalStatus: String(task.approvalStatus ?? 'none'),
       approvedBy: String(task.approvedBy ?? ''),
       cancelReason: String(task.cancelReason ?? ''),
@@ -302,8 +303,9 @@ export class TeamStore {
     }
     const kind = TASK_KINDS.has(input.kind) ? input.kind : 'implementation'
     const approvalPolicy = card?.approvalPolicy?.[kind] ?? 'human'
-    const needsApproval = input.needsApproval === true
-      || (HIGH_RISK_KINDS.has(kind) && approvalPolicy === 'human')
+    const preApproval = HIGH_RISK_KINDS.has(kind) && approvalPolicy === 'human'
+    const needsApproval = input.needsApproval === true || preApproval
+    const approvalStage = preApproval ? 'pre' : needsApproval ? 'post' : 'none'
     const task = this.normalizeTask({
       id: newId('task'),
       kind,
@@ -313,13 +315,15 @@ export class TeamStore {
       ownerBotId,
       reviewerBotId,
       needsApproval,
+      approvalStage,
+      approvalStatus: preApproval ? 'pending' : 'none',
       roomId,
       teamId,
       parentId: String(input.parentId ?? ''),
       createdBy: String(input.createdBy ?? 'human'),
-      status: TASK_STATUSES.has(input.status) ? input.status : 'queued',
+      status: preApproval ? 'needs_approval' : TASK_STATUSES.has(input.status) ? input.status : 'queued',
       progress: input.progress,
-      currentStep: '',
+      currentStep: preApproval ? '等待人工批准执行' : '',
       steps: [],
       artifacts: [],
       createdAt: new Date().toISOString(),
@@ -413,6 +417,9 @@ export class TeamStore {
     if (patch.roomId !== undefined) task.roomId = String(patch.roomId)
     if (patch.status !== undefined) {
       if (!TASK_STATUSES.has(patch.status)) throw new Error(`invalid task status: ${patch.status}`)
+      if (task.approvalStage === 'pre' && task.approvalStatus !== 'approved' && ['queued', 'running'].includes(patch.status)) {
+        throw new Error('human approval is required before this task can start')
+      }
       if (patch.status === 'done' && (task.reviewStatus !== 'approved' || (task.needsApproval && task.approvalStatus !== 'approved'))) {
         throw new Error('task cannot be done before independent review and required human approval')
       }
@@ -617,7 +624,7 @@ export class TeamStore {
     task.updatedAt = ts
     if (verdict === 'approve') {
       task.reviewStatus = 'approved'
-      if (task.needsApproval === true) {
+      if (task.needsApproval === true && task.approvalStatus !== 'approved') {
         task.status = 'needs_approval'
         task.approvalStatus = 'pending'
         task.currentStep = '验收通过，等待人工批准'
@@ -653,15 +660,28 @@ export class TeamStore {
     return this.normalizeTask(task)
   }
 
-  /** Human approval for a reviewed task that has external side effects. */
+  /** Human approval: pre-execution for high-risk tasks, or post-review completion. */
   async approveTask(taskId, input = {}) {
     await this.init()
     const task = this.state.tasks[taskId]
     if (task === undefined) throw new Error(`unknown task: ${taskId}`)
-    if (task.status !== 'needs_approval' || task.reviewStatus !== 'approved') {
+    if (task.status !== 'needs_approval') {
       throw new Error(`task is not waiting for human approval: ${task.status}`)
     }
     const ts = new Date().toISOString()
+    if (task.approvalStage === 'pre') {
+      task.status = 'queued'
+      task.approvalStatus = 'approved'
+      task.approvedBy = String(input.actor ?? 'human')
+      task.currentStep = '人工批准执行，等待派发'
+      task.updatedAt = ts
+      await this.addTaskStep(task.id, { kind: 'approval', label: '人工批准执行', detail: String(input.notes ?? ''), status: 'done', ts }, false)
+      await this.save()
+      return this.normalizeTask(task)
+    }
+    if (task.reviewStatus !== 'approved') {
+      throw new Error(`task is not waiting for human approval: ${task.status}`)
+    }
     task.status = 'done'
     task.progress = 100
     task.approvalStatus = 'approved'
@@ -681,6 +701,16 @@ export class TeamStore {
     if (task === undefined) throw new Error(`unknown task: ${taskId}`)
     if (task.status !== 'needs_approval') throw new Error(`task is not waiting for human approval: ${task.status}`)
     const ts = new Date().toISOString()
+    if (task.approvalStage === 'pre') {
+      task.status = 'blocked'
+      task.approvalStatus = 'rejected'
+      task.approvedBy = String(input.actor ?? 'human')
+      task.currentStep = '人工拒绝执行'
+      task.updatedAt = ts
+      await this.addTaskStep(task.id, { kind: 'approval', label: '人工拒绝执行', detail: String(input.notes ?? ''), status: 'error', ts }, false)
+      await this.save()
+      return this.normalizeTask(task)
+    }
     task.reviewAttempts += 1
     task.approvalStatus = 'rejected'
     task.approvedBy = String(input.actor ?? 'human')

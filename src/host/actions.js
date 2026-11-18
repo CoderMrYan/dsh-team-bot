@@ -157,6 +157,9 @@ export async function assignTask(store, runtime, input, signal) {
   await store.init()
   const task = store.getTask(input.taskId)
   const bot = store.getBot(input.botId)
+  if (task.approvalStage === 'pre' && task.approvalStatus !== 'approved') {
+    throw new Error('human approval is required before this task can start')
+  }
   if (task.reviewerBotId !== '' && task.reviewerBotId === bot.id) {
     throw new Error('the reviewer cannot be the task owner')
   }

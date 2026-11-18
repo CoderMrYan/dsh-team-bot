@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.22.0 — 2026-11-18
+
+### Changed
+
+- High-risk tasks (`publish`, `merge`, `spend`, `external`) now enter `needs_approval` **before execution** when the Team Card policy is `human`. The scheduler and synchronous assignment refuse to start them; the panel offers 「批准执行」/「拒绝执行」. After approval the task is re-queued, then follows the normal independent review flow.
+- `approveTask` distinguishes pre-execution approval (`approvalStage: pre`) from post-review completion; `rejectTask` blocks a pre-execution rejection.
+- `updateTask` and `assignTask` reject attempts to bypass pre-execution approval, so a model cannot move the task to running itself.
+
 ## 0.21.0 — 2026-11-18
 
 ### Added
